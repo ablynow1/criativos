@@ -1,0 +1,13 @@
+{
+  "narracao": "Você já imaginou transformar aquela foto especial em uma obra de arte? É exatamente isso que a gente faz. Simples, rápido, e o resultado é emocionante.",
+  "cenas": [
+    {
+      "imagem": "inputs/cena1.jpg",
+      "prompt": "Câmera lenta se aproximando da cena, luz suave, movimento sutil e cinematográfico, sem cortes bruscos"
+    },
+    {
+      "imagem": "inputs/cena2.jpg",
+      "prompt": "Leve zoom out revelando o quadro finalizado, iluminação quente, sensação de acabamento premium"
+    }
+  ]
+}
