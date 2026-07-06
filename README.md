@@ -6,10 +6,13 @@ Saída: MP4 1080x1920 (9:16), com narração em áudio e legenda queimada, pront
 
 ## Como funciona
 
-1. **Veo 3.1** (Gemini API) anima a(s) imagem(ns) de cena — cada clipe dura até 8s.
+1. **Veo (Vertex AI)** anima a(s) imagem(ns) de cena — cada clipe dura até 8s.
 2. **Cloud Text-to-Speech** narra o texto que você mandar, com timestamp por palavra.
 3. Os timestamps viram um arquivo **.srt** (legenda sincronizada).
 4. **ffmpeg** concatena os clipes, troca o áudio pela narração e queima a legenda — tudo em 1080x1920.
+
+Vertex AI e Cloud TTS autenticam com o **mesmo service account (OAuth2)** — um credential
+só, faturando direto na conta de billing normal do projeto GCP (sem API key, sem prepay separado).
 
 ## Setup
 
@@ -25,16 +28,22 @@ O código já detecta e usa automaticamente `/opt/homebrew/opt/ffmpeg-full/bin/f
 
 ```bash
 cp .env.example .env
-# preencha GEMINI_API_KEY (aistudio.google.com/apikey)
-# e GOOGLE_TTS_API_KEY (pode ser a mesma chave, se "Cloud Text-to-Speech API"
-# estiver habilitada no mesmo projeto GCP em console.cloud.google.com/apis/library)
+# preencha GOOGLE_CLOUD_PROJECT com o project ID certo (ex: atelier-usemalta)
 ```
+
+Precisa de uma service account (autentica Vertex AI + Cloud TTS de uma vez, via OAuth2):
+
+1. Google Cloud Console → IAM & Admin → Service Accounts → Create Service Account (qualquer nome, não precisa de role especial)
+2. Nela, aba "Keys" → Add Key → JSON → baixa o arquivo
+3. Salva esse arquivo como `service-account.json` na raiz deste projeto (já está no `.gitignore`, nunca vai pro git)
+4. Confirma que **Vertex AI API** e **Cloud Text-to-Speech API** estão habilitadas no projeto (console.cloud.google.com/apis/library)
+5. Confirma que o projeto tem uma **conta de faturamento vinculada** (console.cloud.google.com/billing/linkedaccount?project=SEU_PROJETO) — é isso que faz o Veo/TTS consumirem os créditos normais do Cloud em vez de pedir prepay separado
 
 ```bash
 npm install
 ```
 
-(só instala o `dotenv` — o resto usa `fetch` nativo do Node 18+.)
+(instala `dotenv` + `google-auth-library` — o resto usa `fetch` nativo do Node 18+.)
 
 ## Uso
 
@@ -67,7 +76,8 @@ ajuste o número de cenas no roteiro pra bater com o tempo de fala.
 
 ```
 src/
-  generateVideoClip.js   → chama a Veo (image-to-video)
+  generateVideoClip.js   → chama a Veo na Vertex AI (image-to-video)
+  googleAuth.js          → OAuth2 (service account) compartilhado por Veo e TTS
   generateNarration.js   → chama Cloud TTS + timestamps por palavra (SSML marks)
   generateSubtitles.js   → monta o .srt a partir dos timestamps
   mergeFinal.js          → ffmpeg: concat + áudio + legenda + crop 1080x1920

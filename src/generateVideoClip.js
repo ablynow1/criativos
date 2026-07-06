@@ -1,8 +1,15 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { requireGeminiKey } from './config.js';
+import { config, requireProjectId } from './config.js';
+import { getAccessToken } from './googleAuth.js';
 
-const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
-const MODEL = 'veo-3.1-generate-preview';
+function baseUrl() {
+  return `https://${config.googleCloudLocation}-aiplatform.googleapis.com/v1`;
+}
+
+function modelPath() {
+  const project = requireProjectId();
+  return `projects/${project}/locations/${config.googleCloudLocation}/publishers/google/models/${config.veoModel}`;
+}
 
 function mimeTypeFromPath(path) {
   if (path.endsWith('.png')) return 'image/png';
@@ -10,24 +17,25 @@ function mimeTypeFromPath(path) {
   return 'image/jpeg';
 }
 
-async function apiFetch(path, apiKey, opts = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...opts,
+async function vertexFetch(path, accessToken, body) {
+  const res = await fetch(`${baseUrl()}/${path}`, {
+    method: 'POST',
     headers: {
-      'x-goog-api-key': apiKey,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      ...(opts.headers || {}),
     },
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Veo API ${res.status}: ${body}`);
+    const errBody = await res.text();
+    throw new Error(`Vertex AI ${res.status}: ${errBody}`);
   }
   return res.json();
 }
 
 /**
- * Gera um clipe de vídeo (até 8s) animando uma imagem de cena, a partir de um prompt.
+ * Gera um clipe de vídeo (até 8s) animando uma imagem de cena, via Veo na Vertex AI.
+ * Autentica com OAuth2 (service account) — fatura na conta de billing do projeto GCP.
  * Retorna o caminho do arquivo .mp4 salvo em disco.
  */
 export async function generateVideoClip({
@@ -36,55 +44,50 @@ export async function generateVideoClip({
   outputPath,
   aspectRatio = '9:16',
   resolution = '1080p',
-  durationSeconds = '8',
+  durationSeconds = 8,
 }) {
-  const apiKey = requireGeminiKey();
+  const accessToken = await getAccessToken();
   const imageBuffer = await readFile(imagePath);
   const imageBase64 = imageBuffer.toString('base64');
 
-  const startRes = await apiFetch(`/models/${MODEL}:predictLongRunning`, apiKey, {
-    method: 'POST',
-    body: JSON.stringify({
-      instances: [
-        {
-          prompt,
-          image: { inlineData: { mimeType: mimeTypeFromPath(imagePath), data: imageBase64 } },
-        },
-      ],
-      parameters: {
-        aspectRatio,
-        resolution,
-        durationSeconds,
+  const startRes = await vertexFetch(`${modelPath()}:predictLongRunning`, accessToken, {
+    instances: [
+      {
+        prompt,
+        image: { bytesBase64Encoded: imageBase64, mimeType: mimeTypeFromPath(imagePath) },
       },
-    }),
+    ],
+    parameters: {
+      aspectRatio,
+      resolution,
+      durationSeconds,
+      sampleCount: 1,
+    },
   });
 
   const operationName = startRes.name;
   if (!operationName) {
-    throw new Error(`Resposta inesperada da Veo API: ${JSON.stringify(startRes)}`);
+    throw new Error(`Resposta inesperada da Vertex AI: ${JSON.stringify(startRes)}`);
   }
 
-  let operation = startRes;
+  let operation = { done: false };
   while (!operation.done) {
     await new Promise((r) => setTimeout(r, 10_000));
-    operation = await apiFetch(`/${operationName}`, apiKey);
+    operation = await vertexFetch(`${modelPath()}:fetchPredictOperation`, accessToken, {
+      operationName,
+    });
   }
 
   if (operation.error) {
     throw new Error(`Veo generation falhou: ${JSON.stringify(operation.error)}`);
   }
 
-  const sample = operation.response?.generateVideoResponse?.generatedSamples?.[0];
-  const videoUri = sample?.video?.uri;
-  if (!videoUri) {
+  const prediction = operation.response?.predictions?.[0] || operation.response?.videos?.[0];
+  const videoBase64 = prediction?.bytesBase64Encoded;
+  if (!videoBase64) {
     throw new Error(`Nenhum vídeo retornado: ${JSON.stringify(operation.response)}`);
   }
 
-  const videoRes = await fetch(videoUri, { headers: { 'x-goog-api-key': apiKey } });
-  if (!videoRes.ok) {
-    throw new Error(`Falha ao baixar vídeo gerado: ${videoRes.status}`);
-  }
-  const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
-  await writeFile(outputPath, videoBuffer);
+  await writeFile(outputPath, Buffer.from(videoBase64, 'base64'));
   return outputPath;
 }

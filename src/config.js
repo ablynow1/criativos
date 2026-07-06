@@ -9,16 +9,14 @@ function required(name) {
 }
 
 export const config = {
-  geminiApiKey: process.env.GEMINI_API_KEY || '',
-  ttsApiKey: process.env.GOOGLE_TTS_API_KEY || process.env.GEMINI_API_KEY || '',
-  ttsVoiceName: process.env.TTS_VOICE_NAME || 'pt-BR-Chirp3-HD-Achernar',
+  googleCloudProject: process.env.GOOGLE_CLOUD_PROJECT || '',
+  googleCloudLocation: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
+  googleServiceAccountFile: process.env.GOOGLE_APPLICATION_CREDENTIALS || 'service-account.json',
+  veoModel: process.env.VEO_MODEL || 'veo-3.1-generate-001',
+  ttsVoiceName: process.env.TTS_VOICE_NAME || 'pt-BR-Neural2-C',
   ttsLanguageCode: process.env.TTS_LANGUAGE_CODE || 'pt-BR',
 };
 
-export function requireGeminiKey() {
-  return config.geminiApiKey || required('GEMINI_API_KEY');
-}
-
-export function requireTtsKey() {
-  return config.ttsApiKey || required('GOOGLE_TTS_API_KEY');
+export function requireProjectId() {
+  return config.googleCloudProject || required('GOOGLE_CLOUD_PROJECT');
 }

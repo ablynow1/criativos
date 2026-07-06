@@ -1,7 +1,9 @@
 import { writeFile } from 'node:fs/promises';
-import { requireTtsKey, config } from './config.js';
+import { config } from './config.js';
+import { getAccessToken } from './googleAuth.js';
 
-const TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize';
+// v1beta1 (não v1): enableTimePointing só existe nessa versão da API.
+const TTS_URL = 'https://texttospeech.googleapis.com/v1beta1/text:synthesize';
 
 function escapeXml(text) {
   return text
@@ -27,12 +29,15 @@ function buildSsml(text) {
  * Retorna { audioPath, wordTimings: [{ word, startSeconds }] }
  */
 export async function generateNarration({ text, outputAudioPath }) {
-  const apiKey = requireTtsKey();
+  const accessToken = await getAccessToken();
   const { ssml, words } = buildSsml(text);
 
-  const res = await fetch(`${TTS_URL}?key=${apiKey}`, {
+  const res = await fetch(TTS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: JSON.stringify({
       input: { ssml },
       voice: { languageCode: config.ttsLanguageCode, name: config.ttsVoiceName },

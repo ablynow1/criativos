@@ -66,7 +66,7 @@ async function main() {
       outputPath: clipPath,
       aspectRatio: '9:16',
       resolution: '1080p',
-      durationSeconds: String(cena.duracaoSegundos || 8),
+      durationSeconds: cena.duracaoSegundos || 8,
     });
     clipPaths.push(clipPath);
   }
