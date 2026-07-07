@@ -9,31 +9,12 @@ function required(name) {
 }
 
 export const config = {
-  // --- Google Cloud (Vertex AI / Veo + Cloud TTS), via service account OAuth ---
   googleCloudProject: process.env.GOOGLE_CLOUD_PROJECT || '',
   googleCloudLocation: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
   googleServiceAccountFile: process.env.GOOGLE_APPLICATION_CREDENTIALS || 'service-account.json',
   veoModel: process.env.VEO_MODEL || 'veo-3.1-generate-001',
   ttsVoiceName: process.env.TTS_VOICE_NAME || 'pt-BR-Neural2-C',
   ttsLanguageCode: process.env.TTS_LANGUAGE_CODE || 'pt-BR',
-
-  // --- Freepik/Magnific API (refino de imagem + motores de vídeo alt), via API key ---
-  freepikApiKey: process.env.FREEPIK_API_KEY || '',
-  freepikApiBase: process.env.FREEPIK_API_BASE || 'https://api.magnific.com/v1/ai',
-  freepikApiKeyHeader: process.env.FREEPIK_API_KEY_HEADER || 'x-magnific-api-key',
-
-  // Motor de vídeo padrão: "veo" ou "freepik:<model>" (ex "freepik:kling-v2").
-  videoEngine: process.env.VIDEO_ENGINE || 'veo',
-
-  // Refino da imagem antes do vídeo (upscaler de precisão, fiel à identidade).
-  refineImages: /^(1|true|yes|on)$/i.test(process.env.REFINE_IMAGES || ''),
-  refine: {
-    scaleFactor: Number(process.env.REFINE_SCALE_FACTOR || 2),
-    sharpen: Number(process.env.REFINE_SHARPEN || 45),
-    ultraDetail: Number(process.env.REFINE_ULTRA_DETAIL || 45),
-    smartGrain: Number(process.env.REFINE_SMART_GRAIN || 0),
-    flavor: process.env.REFINE_FLAVOR || 'photo',
-  },
 };
 
 export function requireProjectId() {

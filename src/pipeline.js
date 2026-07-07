@@ -1,30 +1,17 @@
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { config } from './config.js';
-import { generateClip } from './videoEngine.js';
-import { refineImage } from './refineImage.js';
+import { generateVideoClip } from './generateVideoClip.js';
 import { generateNarration } from './generateNarration.js';
 import { generateSubtitles } from './generateSubtitles.js';
 import { mergeFinal } from './mergeFinal.js';
 import { getDurationSeconds } from './ffmpeg.js';
 
-// Resolve um flag booleano com precedência: cena > projeto > default (config/env).
-function resolveFlag(sceneVal, projectVal, fallback) {
-  if (sceneVal !== undefined) return Boolean(sceneVal);
-  if (projectVal !== undefined) return Boolean(projectVal);
-  return fallback;
-}
-
 /**
- * Roda o pipeline completo (TTS → [refino] → motor de vídeo → legenda → merge)
- * a partir de um objeto de projeto:
- *   { narracao, cenas, voz?, estiloLegenda?, motor?, refino? }
- * - `motor`: "veo" (default) ou "freepik:<model>" (ex "freepik:kling-v2");
- *   pode ser sobrescrito por cena via `cena.motor`.
- * - `refino`: liga o upscaler de precisão antes do vídeo; por cena via `cena.refino`.
+ * Roda o pipeline completo (TTS → Veo → legenda → merge) a partir de um
+ * objeto de projeto ({ narracao, cenas, voz?, estiloLegenda? }).
  */
 export async function runPipeline(project, { tmpDir, outputPath }) {
-  const { narracao, cenas, voz, estiloLegenda, motor, refino } = project;
+  const { narracao, cenas, voz, estiloLegenda } = project;
 
   if (!narracao || !Array.isArray(cenas) || cenas.length === 0) {
     throw new Error('projeto precisa de "narracao" (string) e "cenas" (array de {imagem, prompt})');
@@ -47,26 +34,14 @@ export async function runPipeline(project, { tmpDir, outputPath }) {
     );
   }
 
-  const engineDefault = motor || config.videoEngine;
-  console.log(`[2/4] Gerando ${cenas.length} clipe(s) de vídeo (motor padrão: ${engineDefault}) — pode levar alguns minutos...`);
+  console.log(`[2/4] Gerando ${cenas.length} clipe(s) de vídeo via Veo (isso pode levar alguns minutos)...`);
   const clipPaths = [];
   for (let i = 0; i < cenas.length; i += 1) {
     const cena = cenas[i];
     const clipPath = path.join(tmpDir, `clip-${i}.mp4`);
-    const engine = cena.motor || engineDefault;
-    const doRefino = resolveFlag(cena.refino, refino, config.refineImages);
-
-    let sourceImage = cena.imagem;
-    if (doRefino) {
-      const refinedPath = path.join(tmpDir, `refined-${i}${path.extname(cena.imagem) || '.png'}`);
-      console.log(`   cena ${i + 1}/${cenas.length}: refinando imagem (upscaler de precisão)...`);
-      sourceImage = await refineImage({ imagePath: cena.imagem, outputPath: refinedPath });
-    }
-
-    console.log(`   cena ${i + 1}/${cenas.length}: ${sourceImage} → motor ${engine}`);
-    await generateClip({
-      engine,
-      imagePath: sourceImage,
+    console.log(`   cena ${i + 1}/${cenas.length}: ${cena.imagem}`);
+    await generateVideoClip({
+      imagePath: cena.imagem,
       prompt: cena.prompt,
       outputPath: clipPath,
       aspectRatio: '9:16',
