@@ -47,6 +47,31 @@ npm install
 
 ## Uso
 
+### Modo 1: a partir de uma landing page (tudo automático)
+
+```bash
+node src/fromLandingPage.js --url https://exemplo.com/lp [--out output/final.mp4] [--estilo contorno]
+```
+
+O que acontece: baixa a LP → Gemini analisa a copy (produto, público-alvo, tom) →
+escreve a narração e escolhe a voz de acordo com o público → gera uma imagem
+contextual do produto (Nano Banana / `gemini-2.5-flash-image` na Vertex) → roda o
+pipeline normal (Veo anima, TTS, legenda, merge).
+
+Use `--briefing-only` pra parar depois do briefing + imagem (sem gastar Veo) e
+revisar/editar o `inputs/<slug>.json` gerado antes de rodar o vídeo:
+
+```bash
+node src/fromLandingPage.js --url https://exemplo.com/lp --briefing-only
+# revisa inputs/<slug>.json e a imagem inputs/<slug>.png, edita o que quiser, depois:
+node src/index.js --config inputs/<slug>.json --out output/final.mp4
+```
+
+⚠️ LPs que são SPA client-side (conteúdo montado por JS) podem vir vazias no scrape —
+o script avisa; nesse caso cole a copy manualmente num projeto.json.
+
+### Modo 2: a partir de imagem própria + roteiro
+
 1. Coloque as imagens de cena em `inputs/` (ex: `inputs/cena1.jpg`)
 2. Crie um `inputs/seu-projeto.json` (veja `inputs/exemplo.json`):
 
@@ -88,6 +113,11 @@ ajuste o número de cenas no roteiro pra bater com o tempo de fala.
 
 ```
 src/
+  fromLandingPage.js     → CLI: URL da LP → briefing (Gemini) → imagem → vídeo
+  scrapeLandingPage.js   → baixa a LP e extrai a copy (fetch, sem headless)
+  analyzeCopy.js         → Gemini (Vertex): copy → produto/público/narração/cenas
+  generateProductImage.js→ imagem contextual do produto (gemini-2.5-flash-image)
+  pipeline.js            → orquestração reutilizável (TTS → Veo → legenda → merge)
   generateVideoClip.js   → chama a Veo na Vertex AI (image-to-video)
   googleAuth.js          → OAuth2 (service account) compartilhado por Veo e TTS
   generateNarration.js   → chama Cloud TTS + timestamps por palavra (SSML marks)
