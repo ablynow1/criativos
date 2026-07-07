@@ -28,7 +28,7 @@ function buildSsml(text) {
  * Gera a narração em áudio a partir de um texto, com timestamps por palavra.
  * Retorna { audioPath, wordTimings: [{ word, startSeconds }] }
  */
-export async function generateNarration({ text, outputAudioPath }) {
+export async function generateNarration({ text, outputAudioPath, voiceName }) {
   const accessToken = await getAccessToken();
   const { ssml, words } = buildSsml(text);
 
@@ -40,7 +40,7 @@ export async function generateNarration({ text, outputAudioPath }) {
     },
     body: JSON.stringify({
       input: { ssml },
-      voice: { languageCode: config.ttsLanguageCode, name: config.ttsVoiceName },
+      voice: { languageCode: config.ttsLanguageCode, name: voiceName || config.ttsVoiceName },
       audioConfig: { audioEncoding: 'MP3' },
       enableTimePointing: ['SSML_MARK'],
     }),

@@ -34,7 +34,7 @@ async function main() {
   await mkdir(path.dirname(outputPath), { recursive: true });
 
   const project = JSON.parse(await readFile(configPath, 'utf-8'));
-  const { narracao, cenas } = project;
+  const { narracao, cenas, voz, estiloLegenda } = project;
 
   if (!narracao || !Array.isArray(cenas) || cenas.length === 0) {
     throw new Error('projeto.json precisa de "narracao" (string) e "cenas" (array de {imagem, prompt})');
@@ -42,7 +42,7 @@ async function main() {
 
   console.log(`[1/4] Gerando narração (TTS) + timestamps...`);
   const narrationAudioPath = path.join(tmpDir, 'narracao.mp3');
-  const { wordTimings } = await generateNarration({ text: narracao, outputAudioPath: narrationAudioPath });
+  const { wordTimings } = await generateNarration({ text: narracao, outputAudioPath: narrationAudioPath, voiceName: voz });
   const narrationDuration = await getDurationSeconds(narrationAudioPath);
   console.log(`   narração: ${narrationDuration.toFixed(1)}s`);
 
@@ -86,6 +86,7 @@ async function main() {
     srtPath,
     outputPath,
     tmpDir,
+    subtitleStyle: estiloLegenda,
   });
 
   console.log(`\n✅ Pronto: ${outputPath}`);

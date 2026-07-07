@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
+import { getSubtitleStyle } from './subtitleStyles.js';
 
 /**
  * Concatena clipes de vídeo (mudos ou não), substitui o áudio pela narração,
@@ -12,6 +13,7 @@ export async function mergeFinal({
   srtPath,
   outputPath,
   tmpDir,
+  subtitleStyle = 'caixa',
 }) {
   let videoInput = clipPaths[0];
 
@@ -26,8 +28,7 @@ export async function mergeFinal({
   }
 
   const srtEscaped = srtPath.replace(/:/g, '\\:');
-  const subtitleStyle =
-    "FontName=Arial,FontSize=14,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=0,Alignment=2,MarginV=120";
+  const styleString = getSubtitleStyle(subtitleStyle);
 
   // Duração final = duração do vídeo, não do áudio. Se a narração terminar antes,
   // o vídeo continua rodando (silêncio no final) em vez de ser cortado no tamanho da fala.
@@ -36,7 +37,7 @@ export async function mergeFinal({
   await runFfmpeg([
     '-i', videoInput,
     '-i', narrationAudioPath,
-    '-vf', `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles=${srtEscaped}:force_style='${subtitleStyle}'`,
+    '-vf', `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles=${srtEscaped}:force_style='${styleString}'`,
     '-map', '0:v:0',
     '-map', '1:a:0',
     '-c:v', 'libx264',

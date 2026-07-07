@@ -53,12 +53,24 @@ npm install
 ```json
 {
   "narracao": "texto completo que será narrado por cima do vídeo",
+  "voz": "pt-BR-Wavenet-B",
+  "estiloLegenda": "contorno",
   "cenas": [
     { "imagem": "inputs/cena1.jpg", "prompt": "descrição de movimento de câmera pra Veo" },
     { "imagem": "inputs/cena2.jpg", "prompt": "descrição da segunda cena" }
   ]
 }
 ```
+
+`voz` e `estiloLegenda` são opcionais (usam o default do `.env` / `caixa` se omitidos).
+
+**Vozes** (só Neural2/Wavenet suportam legenda sincronizada — Chirp3-HD não):
+`pt-BR-Neural2-A/C` e `pt-BR-Wavenet-A/C/D` (femininas), `pt-BR-Neural2-B` e `pt-BR-Wavenet-B/E` (masculinas).
+Lista completa: `cloud.google.com/text-to-speech/docs/voices`.
+
+**Estilos de legenda** (`src/subtitleStyles.js`):
+- `caixa` — texto branco em caixa preta sólida (padrão)
+- `contorno` — texto grande em negrito com contorno preto grosso, sem caixa (estilo Hormozi/MrBeast)
 
 3. Rode:
 
@@ -80,6 +92,7 @@ src/
   googleAuth.js          → OAuth2 (service account) compartilhado por Veo e TTS
   generateNarration.js   → chama Cloud TTS + timestamps por palavra (SSML marks)
   generateSubtitles.js   → monta o .srt a partir dos timestamps
+  subtitleStyles.js      → presets de estilo de legenda (caixa, contorno)
   mergeFinal.js          → ffmpeg: concat + áudio + legenda + crop 1080x1920
   ffmpeg.js              → wrapper de execução do ffmpeg/ffprobe
   index.js               → orquestrador (CLI)
