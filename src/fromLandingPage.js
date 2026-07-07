@@ -27,7 +27,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const url = args.url;
   if (!url) {
-    console.error('Uso: node src/fromLandingPage.js --url <URL da LP> [--out output/final.mp4] [--estilo contorno] [--briefing-only]');
+    console.error('Uso: node src/fromLandingPage.js --url <URL da LP> [--out output/final.mp4] [--estilo contorno] [--motor veo|freepik:kling-v2] [--refino|--no-refino] [--briefing-only]');
     process.exit(1);
   }
 
@@ -65,6 +65,9 @@ async function main() {
     narracao: briefing.narracao,
     voz: briefing.voz,
     estiloLegenda: args.estilo || 'contorno',
+    ...(typeof args.motor === 'string' ? { motor: args.motor } : {}),
+    ...(args.refino === true ? { refino: true } : {}),
+    ...(args['no-refino'] === true ? { refino: false } : {}),
     cenas: briefing.cenas.map((cena) => ({ imagem: imagePath, prompt: cena.prompt })),
   };
 

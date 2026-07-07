@@ -14,6 +14,13 @@ Saída: MP4 1080x1920 (9:16), com narração em áudio e legenda queimada, pront
 Vertex AI e Cloud TTS autenticam com o **mesmo service account (OAuth2)** — um credential
 só, faturando direto na conta de billing normal do projeto GCP (sem API key, sem prepay separado).
 
+Opcionalmente, a **API da Freepik/Magnific** (chave à parte) liga dois recursos:
+- **Refino de imagem** antes do vídeo — upscaler de precisão *fiel à identidade* (não
+  alucina rosto/produto), que deixa a imagem do Nano Banana (768×1344, soft) nítida e
+  ~2× maior. O motor de vídeo anima uma imagem crocante = movimento muito mais limpo.
+- **Motor de vídeo selecionável** — em vez do Veo, dá pra usar Kling, Seedance e outros
+  da Freepik, por run ou por cena. O Veo segue como padrão.
+
 ## Setup
 
 **Requisito:** o filtro de legenda queimada precisa de `ffmpeg` compilado com `libass`.
@@ -103,6 +110,44 @@ Lista completa: `cloud.google.com/text-to-speech/docs/voices`.
 node src/index.js --config inputs/seu-projeto.json --out output/final.mp4
 ```
 
+### Refino de imagem e motor de vídeo (Freepik/Magnific)
+
+Preencha `FREEPIK_API_KEY` no `.env` (gere em freepik.com → Dashboard → API, ou magnific.com).
+É uma chave **separada** da service account do Google. Sem ela o Veo continua funcionando
+normal; só o refino e os motores Freepik ficam indisponíveis.
+
+**Refino (upscaler de precisão, fiel):** liga por run com `--refino` (ou `REFINE_IMAGES=true`
+no `.env` pra ligar sempre). Roda entre a imagem e o vídeo, em cada cena:
+
+```bash
+node src/index.js --config inputs/seu-projeto.json --refino
+node src/fromLandingPage.js --url https://exemplo.com/lp --refino
+```
+
+**Motor de vídeo:** `--motor veo` (padrão) ou `--motor freepik:<model>`:
+
+```bash
+node src/index.js --config inputs/seu-projeto.json --motor freepik:kling-v2 --refino
+```
+
+Dá pra escolher **por cena** também (tem precedência sobre o global), útil pra comparar
+motores lado a lado no mesmo criativo:
+
+```json
+{
+  "narracao": "...",
+  "motor": "veo",
+  "refino": true,
+  "cenas": [
+    { "imagem": "inputs/cena1.png", "prompt": "...", "motor": "freepik:kling-v2" },
+    { "imagem": "inputs/cena1.png", "prompt": "...", "motor": "veo" }
+  ]
+}
+```
+
+> Motores Freepik (Kling etc) aceitam duração 5 ou 10s — o pipeline mapeia a duração da
+> cena pro mais próximo. Faturam na conta Freepik; o Veo, no Cloud Billing do GCP.
+
 ### Dica de tempo
 
 Cada cena gera um clipe de 8s (fixo, ou ajustável por cena com `"duracaoSegundos"`).
@@ -117,8 +162,12 @@ src/
   scrapeLandingPage.js   → baixa a LP e extrai a copy (fetch, sem headless)
   analyzeCopy.js         → Gemini (Vertex): copy → produto/público/narração/cenas
   generateProductImage.js→ imagem contextual do produto (gemini-2.5-flash-image)
-  pipeline.js            → orquestração reutilizável (TTS → Veo → legenda → merge)
+  pipeline.js            → orquestração reutilizável (TTS → [refino] → motor → legenda → merge)
+  videoEngine.js         → dispatcher do motor: "veo" ou "freepik:<model>" (por cena/projeto)
   generateVideoClip.js   → chama a Veo na Vertex AI (image-to-video)
+  generateVideoClipFreepik.js → motor de vídeo alt via Freepik (Kling/Seedance)
+  refineImage.js         → upscaler de precisão (Magnific) antes do vídeo, fiel à identidade
+  freepikClient.js       → client REST da Freepik/Magnific (POST task + polling + download)
   googleAuth.js          → OAuth2 (service account) compartilhado por Veo e TTS
   generateNarration.js   → chama Cloud TTS + timestamps por palavra (SSML marks)
   generateSubtitles.js   → monta o .srt a partir dos timestamps
