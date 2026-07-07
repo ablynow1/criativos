@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { runFfmpeg } from './ffmpeg.js';
+import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
 
 /**
  * Concatena clipes de vídeo (mudos ou não), substitui o áudio pela narração,
@@ -29,6 +29,10 @@ export async function mergeFinal({
   const subtitleStyle =
     "FontName=Arial,FontSize=14,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=0,Alignment=2,MarginV=120";
 
+  // Duração final = duração do vídeo, não do áudio. Se a narração terminar antes,
+  // o vídeo continua rodando (silêncio no final) em vez de ser cortado no tamanho da fala.
+  const videoDuration = await getDurationSeconds(videoInput);
+
   await runFfmpeg([
     '-i', videoInput,
     '-i', narrationAudioPath,
@@ -39,7 +43,7 @@ export async function mergeFinal({
     '-preset', 'medium',
     '-crf', '20',
     '-c:a', 'aac',
-    '-shortest',
+    '-t', String(videoDuration),
     outputPath,
   ]);
 

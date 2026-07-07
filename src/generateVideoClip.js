@@ -1,6 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 import { config, requireProjectId } from './config.js';
 import { getAccessToken } from './googleAuth.js';
+import { runFfmpeg } from './ffmpeg.js';
 
 function baseUrl() {
   return `https://${config.googleCloudLocation}-aiplatform.googleapis.com/v1`;
@@ -11,10 +14,15 @@ function modelPath() {
   return `projects/${project}/locations/${config.googleCloudLocation}/publishers/google/models/${config.veoModel}`;
 }
 
-function mimeTypeFromPath(path) {
-  if (path.endsWith('.png')) return 'image/png';
-  if (path.endsWith('.webp')) return 'image/webp';
-  return 'image/jpeg';
+// A Vertex AI só aceita JPEG ou PNG — outros formatos (webp, etc) precisam converter antes.
+async function ensureSupportedImage(imagePath) {
+  const ext = path.extname(imagePath).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') {
+    return { path: imagePath, mimeType: ext === '.png' ? 'image/png' : 'image/jpeg' };
+  }
+  const convertedPath = path.join(os.tmpdir(), `${path.basename(imagePath, ext)}-${Date.now()}.png`);
+  await runFfmpeg(['-i', imagePath, convertedPath]);
+  return { path: convertedPath, mimeType: 'image/png' };
 }
 
 async function vertexFetch(path, accessToken, body) {
@@ -47,14 +55,15 @@ export async function generateVideoClip({
   durationSeconds = 8,
 }) {
   const accessToken = await getAccessToken();
-  const imageBuffer = await readFile(imagePath);
+  const supportedImage = await ensureSupportedImage(imagePath);
+  const imageBuffer = await readFile(supportedImage.path);
   const imageBase64 = imageBuffer.toString('base64');
 
   const startRes = await vertexFetch(`${modelPath()}:predictLongRunning`, accessToken, {
     instances: [
       {
         prompt,
-        image: { bytesBase64Encoded: imageBase64, mimeType: mimeTypeFromPath(imagePath) },
+        image: { bytesBase64Encoded: imageBase64, mimeType: supportedImage.mimeType },
       },
     ],
     parameters: {
