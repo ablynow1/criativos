@@ -1,0 +1,32 @@
+{
+  "narracao": "Já imaginou ver a sua alma no seu signo? Transforme sua foto em uma obra de arte única, que revela a sua essência celestial. Uma arte fine-art que vai emocionar e decorar seu espaço. Crie seu Retrato Astral agora!",
+  "voz": "pt-BR-Neural2-C",
+  "estiloLegenda": "contorno",
+  "cenas": [
+    {
+      "imagem": "inputs/signo.png",
+      "prompt": "A cinematic, photorealistic shot, 9:16, slowly zooms in on the 'Retrato Astral' framed art on the wall, revealing the intricate fine-art details of the woman's celestial zodiac embodiment. Subtle light shimmers across the art, emphasizing its premium quality and unique design."
+    },
+    {
+      "imagem": "inputs/signo.png",
+      "prompt": "A cinematic, photorealistic shot, 9:16, subtly pans from the 'Retrato Astral' art to the woman's face. Her eyes, filled with wonder and a touch of emotion, slowly turn towards the camera, a soft, genuine smile forming, conveying deep personal connection and awe. Her hair gently sways."
+    }
+  ],
+  "_briefing": {
+    "produto": "Retrato Astral",
+    "publicoAlvo": "Mulheres 25-45 anos, apaixonadas por astrologia e autoconhecimento, que buscam arte personalizada e significativa para expressar sua identidade, ou presentear alguém de forma única e emocionante.",
+    "tom": "Emocional, inspirador, premium, místico e pessoal.",
+    "narracao": "Já imaginou ver a sua alma no seu signo? Transforme sua foto em uma obra de arte única, que revela a sua essência celestial. Uma arte fine-art que vai emocionar e decorar seu espaço. Crie seu Retrato Astral agora!",
+    "voz": "pt-BR-Neural2-C",
+    "imagemPrompt": "A 9:16 photorealistic portrait of a radiant woman, 30s, with a warm, reflective smile, gazing at a framed 'Retrato Astral' fine art piece on her modern, minimalist wall. The art depicts her transformed into her zodiac sign's celestial embodiment, with subtle mystical elements. Soft, ethereal lighting from a window highlights her face and the artwork, creating an intimate, emotional atmosphere. Cinematic, high detail.",
+    "cenas": [
+      {
+        "prompt": "A cinematic, photorealistic shot, 9:16, slowly zooms in on the 'Retrato Astral' framed art on the wall, revealing the intricate fine-art details of the woman's celestial zodiac embodiment. Subtle light shimmers across the art, emphasizing its premium quality and unique design."
+      },
+      {
+        "prompt": "A cinematic, photorealistic shot, 9:16, subtly pans from the 'Retrato Astral' art to the woman's face. Her eyes, filled with wonder and a touch of emotion, slowly turn towards the camera, a soft, genuine smile forming, conveying deep personal connection and awe. Her hair gently sways."
+      }
+    ]
+  },
+  "_url": "https://atelier.usemalta.com/signo"
+}

@@ -1,0 +1,15 @@
+{
+  "narracao": "Chega de dar meia e caneca pro seu pai. Dê um presente que realmente faz sentido e dure o resto da vida: um quadro personalizado de vocês dois.",
+  "voz": "pt-BR-Wavenet-B",
+  "estiloLegenda": "contorno",
+  "cenas": [
+    {
+      "imagem": "inputs/cena6.webp",
+      "prompt": "Slow cinematic push-in and tilt down from the two men's smiling faces toward the ornate framed painting they are holding, camera settles in a close-up on the portrait, revealing rich oil painting brushstroke details, warm natural window light, shallow depth of field, no camera shake, photorealistic"
+    },
+    {
+      "imagem": "inputs/cena6.webp",
+      "prompt": "Camera holds close on the ornate framed painting with slight subtle parallax movement, warm golden light glinting off the gold frame, rich oil painting brushstroke details in focus, then slowly pulls back just enough to reveal the father and son smiling warmly above it, cinematic emotional tone, photorealistic"
+    }
+  ]
+}

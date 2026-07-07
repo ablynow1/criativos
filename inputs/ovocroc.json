@@ -1,0 +1,32 @@
+{
+  "narracao": "Seu cão destrói tudo e te deixa exausto? O OvoCroc ativa o instinto de caça, cansa ele em 15 minutos e traz paz pra sua casa. Chega de sofá rasgado e latido! Dê um fim à destruição hoje.",
+  "voz": "pt-BR-Neural2-C",
+  "estiloLegenda": "contorno",
+  "cenas": [
+    {
+      "imagem": "inputs/ovocroc.png",
+      "prompt": "Cinematic, photorealistic. A close-up shot on a happy, medium-sized dog (e.g., Golden Retriever) intensely focused on a green OvoCroc toy. The toy subtly rolls and wobbles across the pristine beige sofa with each gentle nudge from the dog's nose, showcasing its self-moving action. Soft, warm natural light highlights the dog's playful concentration."
+    },
+    {
+      "imagem": "inputs/ovocroc.png",
+      "prompt": "Cinematic, photorealistic. Starting from the dog happily playing with the OvoCroc on the intact beige sofa, the camera slowly glides upwards to reveal a relaxed woman (30s-40s) in the background, observing her dog with a serene, relieved smile, holding a cup of tea. The overall scene emphasizes a peaceful, undamaged home environment, bathed in soft, inviting natural light."
+    }
+  ],
+  "_briefing": {
+    "produto": "OvoCroc™",
+    "publicoAlvo": "Tutores de cães ansiosos ou destruidores, que se preocupam com latidos excessivos, móveis danificados e a culpa de deixar o pet sozinho. Buscam uma solução eficaz para a ansiedade e o tédio do cão, garantindo paz em casa.",
+    "tom": "Empático, direto, solucionador de problemas, com senso de urgência.",
+    "narracao": "Seu cão destrói tudo e te deixa exausto? O OvoCroc ativa o instinto de caça, cansa ele em 15 minutos e traz paz pra sua casa. Chega de sofá rasgado e latido! Dê um fim à destruição hoje.",
+    "voz": "pt-BR-Neural2-C",
+    "imagemPrompt": "Photorealistic, vertical 9:16. A medium-sized, happy dog (e.g., a Golden Retriever or a friendly mixed breed) is completely engrossed, playfully nudging a vibrant green OvoCroc toy on a spotless, beige sofa. The dog's eyes are fixed on the toy, tail slightly wagging, conveying deep engagement and contentment. In the background, a relaxed woman (30s-40s) with a gentle, relieved smile watches her dog, perhaps with a cup of tea in her hand, enjoying the quiet and order of her living room. The scene is bathed in soft, inviting natural light, emphasizing peace and an intact home. Cinematic, high detail.",
+    "cenas": [
+      {
+        "prompt": "Cinematic, photorealistic. A close-up shot on a happy, medium-sized dog (e.g., Golden Retriever) intensely focused on a green OvoCroc toy. The toy subtly rolls and wobbles across the pristine beige sofa with each gentle nudge from the dog's nose, showcasing its self-moving action. Soft, warm natural light highlights the dog's playful concentration."
+      },
+      {
+        "prompt": "Cinematic, photorealistic. Starting from the dog happily playing with the OvoCroc on the intact beige sofa, the camera slowly glides upwards to reveal a relaxed woman (30s-40s) in the background, observing her dog with a serene, relieved smile, holding a cup of tea. The overall scene emphasizes a peaceful, undamaged home environment, bathed in soft, inviting natural light."
+      }
+    ]
+  },
+  "_url": "https://club.petcroc.com/lp/"
+}
