@@ -356,6 +356,8 @@ switch ($action) {
     $jobs = jread('jobs.json', []);
     foreach ($jobs as $i => $j) {
       if (($j['id'] ?? '') !== $id) continue;
+      // não ressuscita job já terminal (error/done/cancelado) — evita corrida de progresso em voo
+      if (in_array($j['status'], ['error', 'done'], true)) break;
       $jobs[$i]['status'] = 'running';
       if (isset($b['pct'])) $jobs[$i]['pct'] = max(0, min(99, (int)$b['pct']));
       if (isset($b['stage'])) $jobs[$i]['stage'] = mb_substr((string)$b['stage'], 0, 120);

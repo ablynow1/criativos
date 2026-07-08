@@ -38,8 +38,15 @@ async function call(action, { body = null, form = null } = {}) {
   return data;
 }
 
-const progress = (job_id, pct, stage, logLine) =>
-  call('worker_progress', { body: { job_id, pct, stage, log: logLine } }).catch(() => {});
+// progresso serializado (chain) — garante ordem e permite flush antes do worker_error,
+// pra um progresso em voo nunca ressuscitar um job que já falhou.
+let progressChain = Promise.resolve();
+const progress = (job_id, pct, stage, logLine) => {
+  progressChain = progressChain.then(() =>
+    call('worker_progress', { body: { job_id, pct, stage, log: logLine } }).catch(() => {}));
+  return progressChain;
+};
+const flushProgress = () => progressChain.catch(() => {});
 
 async function download(url, dest) {
   const full = url.startsWith('http') ? url : `${BASE}/${url}`;
@@ -159,6 +166,7 @@ async function loop() {
           await processJob(job);
         } catch (err) {
           log(`❌ job ${job.id} falhou:`, err.message);
+          await flushProgress(); // espera todo progresso em voo antes de marcar erro
           await call('worker_error', { body: { job_id: job.id, message: err.message } }).catch(() => {});
         }
         continue; // sem sleep: pega o próximo da fila direto
