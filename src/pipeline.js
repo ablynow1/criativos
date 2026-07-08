@@ -11,7 +11,7 @@ import { getDurationSeconds } from './ffmpeg.js';
  * objeto de projeto ({ narracao, cenas, voz?, estiloLegenda? }).
  */
 export async function runPipeline(project, { tmpDir, outputPath }) {
-  const { narracao, cenas, voz, estiloLegenda } = project;
+  const { narracao, cenas, voz, estiloLegenda, velocidadeVoz } = project;
 
   if (!narracao || !Array.isArray(cenas) || cenas.length === 0) {
     throw new Error('projeto precisa de "narracao" (string) e "cenas" (array de {imagem, prompt})');
@@ -22,7 +22,7 @@ export async function runPipeline(project, { tmpDir, outputPath }) {
 
   console.log(`[1/4] Gerando narração (TTS) + timestamps...`);
   const narrationAudioPath = path.join(tmpDir, 'narracao.mp3');
-  const { wordTimings } = await generateNarration({ text: narracao, outputAudioPath: narrationAudioPath, voiceName: voz });
+  const { wordTimings } = await generateNarration({ text: narracao, outputAudioPath: narrationAudioPath, voiceName: voz, speakingRate: velocidadeVoz });
   const narrationDuration = await getDurationSeconds(narrationAudioPath);
   console.log(`   narração: ${narrationDuration.toFixed(1)}s`);
 

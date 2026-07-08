@@ -80,6 +80,7 @@ o script avisa; nesse caso cole a copy manualmente num projeto.json.
   "narracao": "texto completo que será narrado por cima do vídeo",
   "voz": "pt-BR-Wavenet-B",
   "estiloLegenda": "contorno",
+  "velocidadeVoz": 1.5,
   "cenas": [
     { "imagem": "inputs/cena1.jpg", "prompt": "descrição de movimento de câmera pra Veo" },
     { "imagem": "inputs/cena2.jpg", "prompt": "descrição da segunda cena" }
@@ -87,7 +88,13 @@ o script avisa; nesse caso cole a copy manualmente num projeto.json.
 }
 ```
 
-`voz` e `estiloLegenda` são opcionais (usam o default do `.env` / `caixa` se omitidos).
+`voz`, `estiloLegenda` e `velocidadeVoz` são opcionais (usam o default do `.env` / `caixa` se omitidos).
+
+**Velocidade da narração** (`velocidadeVoz` / `TTS_SPEAKING_RATE`): toda narração
+sai por padrão a **1.5x** (50% mais rápida) pra não ficar lenta demais no vídeo.
+`1.0` = velocidade normal. O Cloud TTS já devolve os timestamps por palavra na
+mesma velocidade, então a legenda continua sincronizada. Dá pra mudar o padrão
+global no `.env` (`TTS_SPEAKING_RATE`) ou por projeto no JSON (`velocidadeVoz`).
 
 **Vozes** (só Neural2/Wavenet suportam legenda sincronizada — Chirp3-HD não):
 `pt-BR-Neural2-A/C` e `pt-BR-Wavenet-A/C/D` (femininas), `pt-BR-Neural2-B` e `pt-BR-Wavenet-B/E` (masculinas).

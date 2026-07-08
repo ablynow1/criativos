@@ -15,6 +15,10 @@ export const config = {
   veoModel: process.env.VEO_MODEL || 'veo-3.1-generate-001',
   ttsVoiceName: process.env.TTS_VOICE_NAME || 'pt-BR-Neural2-C',
   ttsLanguageCode: process.env.TTS_LANGUAGE_CODE || 'pt-BR',
+  // Velocidade da narração. 1.0 = normal; 1.5 = 50% mais rápido (padrão, pra
+  // não ficar lenta demais no vídeo). O Cloud TTS já devolve os timestamps por
+  // palavra nessa mesma velocidade, então a legenda continua sincronizada.
+  ttsSpeakingRate: Number(process.env.TTS_SPEAKING_RATE) || 1.5,
 };
 
 export function requireProjectId() {

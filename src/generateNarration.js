@@ -28,9 +28,14 @@ function buildSsml(text) {
  * Gera a narração em áudio a partir de um texto, com timestamps por palavra.
  * Retorna { audioPath, wordTimings: [{ word, startSeconds }] }
  */
-export async function generateNarration({ text, outputAudioPath, voiceName }) {
+export async function generateNarration({ text, outputAudioPath, voiceName, speakingRate }) {
   const accessToken = await getAccessToken();
   const { ssml, words } = buildSsml(text);
+
+  // Acelera a voz (padrão 1.5x) pra não ficar lenta demais no vídeo. O Cloud TTS
+  // gera o áudio já nessa velocidade e devolve os timepoints por palavra no mesmo
+  // ritmo, então a legenda continua sincronizada sem precisar de pós-processamento.
+  const rate = speakingRate ?? config.ttsSpeakingRate;
 
   const res = await fetch(TTS_URL, {
     method: 'POST',
@@ -41,7 +46,7 @@ export async function generateNarration({ text, outputAudioPath, voiceName }) {
     body: JSON.stringify({
       input: { ssml },
       voice: { languageCode: config.ttsLanguageCode, name: voiceName || config.ttsVoiceName },
-      audioConfig: { audioEncoding: 'MP3' },
+      audioConfig: { audioEncoding: 'MP3', speakingRate: rate },
       enableTimePointing: ['SSML_MARK'],
     }),
   });
