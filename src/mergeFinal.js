@@ -1,11 +1,17 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
+import { runFfmpeg, getDurationSeconds, hasAudioStream } from './ffmpeg.js';
 import { getSubtitleStyle } from './subtitleStyles.js';
 
 /**
- * Concatena clipes de vídeo (mudos ou não), substitui o áudio pela narração,
- * e queima a legenda por cima. Saída final: 1080x1920.
+ * Monta o vídeo final com MIXAGEM DE ESTÚDIO:
+ *   - narração em primeiro plano (normalizada, sempre inteligível)
+ *   - som ambiente nativo dos clipes Veo como camada de realismo, com DUCKING
+ *     (abaixa sozinho quando a narração fala — sidechain compression)
+ *   - trilha musical opcional (Lyria) com fade in/out, também duckada
+ *   - master em -14 LUFS (padrão de loudness das plataformas sociais/Meta)
+ *   - legenda queimada por cima
+ * Saída: 1080x1920.
  */
 export async function mergeFinal({
   clipPaths,
@@ -14,36 +20,92 @@ export async function mergeFinal({
   outputPath,
   tmpDir,
   subtitleStyle = 'caixa',
+  musicPath = null,   // WAV/MP3 da trilha (opcional)
+  ambiente = true,    // usa o som nativo dos clipes como camada ambiente
 }) {
+  // --- 1) concatena os clipes preservando o áudio nativo ---
   let videoInput = clipPaths[0];
-
   if (clipPaths.length > 1) {
-    const listPath = path.join(tmpDir, 'concat_list.txt');
-    const listContent = clipPaths.map((p) => `file '${path.resolve(p)}'`).join('\n');
-    await writeFile(listPath, listContent, 'utf-8');
-
+    // garante faixa de áudio em todo clipe (clipes sem som ganham silêncio) pro concat não quebrar
+    const normalized = [];
+    for (let i = 0; i < clipPaths.length; i += 1) {
+      const p = clipPaths[i];
+      if (await hasAudioStream(p)) { normalized.push(p); continue; }
+      const fixed = path.join(tmpDir, `clip-silent-${i}.mp4`);
+      await runFfmpeg(['-i', p, '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+        '-c:v', 'copy', '-c:a', 'aac', '-shortest', fixed]);
+      normalized.push(fixed);
+    }
+    const inputs = normalized.flatMap((p) => ['-i', p]);
+    const n = normalized.length;
+    const pads = normalized.map((_, i) => `[${i}:v][${i}:a]`).join('');
     const concatenated = path.join(tmpDir, 'concatenated.mp4');
-    await runFfmpeg(['-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', concatenated]);
+    await runFfmpeg([
+      ...inputs,
+      '-filter_complex', `${pads}concat=n=${n}:v=1:a=1[v][a]`,
+      '-map', '[v]', '-map', '[a]',
+      '-c:v', 'libx264', '-preset', 'medium', '-crf', '19',
+      '-c:a', 'aac', '-ar', '48000',
+      concatenated,
+    ]);
     videoInput = concatenated;
   }
 
+  const videoDuration = await getDurationSeconds(videoInput);
+  const useAmbient = ambiente !== false && await hasAudioStream(videoInput);
+  const useMusic = Boolean(musicPath);
+
+  // --- 2) monta o filtergraph da mixagem ---
   const srtEscaped = srtPath.replace(/:/g, '\\:');
   const styleString = getSubtitleStyle(subtitleStyle);
 
-  // Duração final = duração do vídeo, não do áudio. Se a narração terminar antes,
-  // o vídeo continua rodando (silêncio no final) em vez de ser cortado no tamanho da fala.
-  const videoDuration = await getDurationSeconds(videoInput);
+  const args = ['-i', videoInput, '-i', narrationAudioPath];
+  if (useMusic) args.push('-i', musicPath);
+  const musIdx = 2; // índice do input da música quando presente
+
+  const layers = 1 + (useAmbient ? 1 : 0) + (useMusic ? 1 : 0);
+  const fc = [];
+
+  // narração: normaliza e clona pros sidechains do ducking
+  const scCopies = (useAmbient ? 1 : 0) + (useMusic ? 1 : 0);
+  if (scCopies > 0) {
+    const outs = ['[nar]', ...Array.from({ length: scCopies }, (_, i) => `[sc${i}]`)].join('');
+    fc.push(`[1:a]loudnorm=I=-16:TP=-2,aresample=48000,asplit=${scCopies + 1}${outs}`);
+  } else {
+    fc.push(`[1:a]loudnorm=I=-16:TP=-2,aresample=48000[nar]`);
+  }
+
+  let sc = 0;
+  if (useAmbient) {
+    // ambiente do Veo: presença real, mas cede pra voz (ducking)
+    fc.push(`[0:a]aresample=48000,volume=0.9[amb]`);
+    fc.push(`[amb][sc${sc}]sidechaincompress=threshold=0.02:ratio=12:attack=10:release=400[ambd]`);
+    sc += 1;
+  }
+  if (useMusic) {
+    // trilha: loopa se precisar, corta na duração, fades, nível de fundo, ducking
+    const fadeOutStart = Math.max(0, videoDuration - 1.4).toFixed(2);
+    fc.push(
+      `[${musIdx}:a]aresample=48000,aloop=loop=-1:size=1440000,atrim=0:${(videoDuration + 0.2).toFixed(2)},` +
+      `afade=t=in:d=0.6,afade=t=out:st=${fadeOutStart}:d=1.4,volume=0.32[mus]`
+    );
+    fc.push(`[mus][sc${sc}]sidechaincompress=threshold=0.02:ratio=8:attack=15:release=500[musd]`);
+  }
+
+  const mixIn = ['[nar]', useAmbient ? '[ambd]' : null, useMusic ? '[musd]' : null].filter(Boolean).join('');
+  // master: -14 LUFS integrado (alvo das plataformas), true peak -1.5
+  fc.push(`${mixIn}amix=inputs=${layers}:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`);
+
+  // vídeo: legenda queimada
+  fc.push(`[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles=${srtEscaped}:force_style='${styleString}'[vout]`);
 
   await runFfmpeg([
-    '-i', videoInput,
-    '-i', narrationAudioPath,
-    '-vf', `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles=${srtEscaped}:force_style='${styleString}'`,
-    '-map', '0:v:0',
-    '-map', '1:a:0',
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', '20',
-    '-c:a', 'aac',
+    ...args,
+    '-filter_complex', fc.join(';'),
+    '-map', '[vout]', '-map', '[aout]',
+    '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
+    '-movflags', '+faststart',
     '-t', String(videoDuration),
     outputPath,
   ]);

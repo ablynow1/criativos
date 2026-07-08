@@ -35,9 +35,12 @@ export async function kenBurns({ imagePath, outputPath, durationSeconds = 8, ind
     `format=yuv420p`;
 
   await runFfmpeg([
-    '-loop', '1', '-i', imagePath, '-t', String(durationSeconds), '-r', String(fps),
+    '-loop', '1', '-i', imagePath,
+    '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', // faixa de silêncio: uniformiza o concat com clipes Veo (que têm áudio)
+    '-t', String(durationSeconds), '-r', String(fps),
     '-vf', vf,
     '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-shortest',
     outputPath,
   ]);
   return outputPath;

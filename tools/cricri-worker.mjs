@@ -102,6 +102,8 @@ async function processJob(job) {
   if (snap.modo === 'lp') {
     args = ['src/fromLandingPage.js', '--url', snap.lp_url, '--slug', `cricri-${job.id}`,
       '--estilo', snap.estiloLegenda || 'contorno', '--out', outPath];
+    if (snap.audio?.musica && snap.audio.musica !== 'nenhuma') args.push('--musica', snap.audio.musica);
+    if (snap.audio?.ambiente === false) args.push('--sem-ambiente');
   } else if (snap.modo === 'quadro') {
     // baixa a foto de referência do avatar e monta o config do modo quadro
     await progress(job.id, 3, 'baixando foto de referência');
@@ -116,6 +118,7 @@ async function processJob(job) {
       narracao: snap.narracao,
       voz: snap.voz,
       estiloLegenda: snap.estiloLegenda || 'contorno',
+      audio: snap.audio || {},
       cenas: (snap.cenas || []).map((c) => ({ prompt: c.prompt, duracao: c.duracao || 8 })),
     };
     const cfgPath = path.join(jobDir, 'quadro.json');
@@ -132,7 +135,7 @@ async function processJob(job) {
       await download(cn.imagem, local);
       cenas.push({ imagem: local, prompt: cn.prompt, duracaoSegundos: cn.duracao || 8 });
     }
-    const projeto = { narracao: snap.narracao, voz: snap.voz, estiloLegenda: snap.estiloLegenda || 'contorno', cenas };
+    const projeto = { narracao: snap.narracao, voz: snap.voz, estiloLegenda: snap.estiloLegenda || 'contorno', audio: snap.audio || {}, cenas };
     const cfgPath = path.join(jobDir, 'projeto.json');
     await writeFile(cfgPath, JSON.stringify(projeto, null, 2));
     args = ['src/index.js', '--config', cfgPath, '--out', outPath];

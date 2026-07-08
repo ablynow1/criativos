@@ -53,6 +53,7 @@ export async function generateVideoClip({
   aspectRatio = '9:16',
   resolution = '1080p',
   durationSeconds = 8,
+  ambiente = true, // áudio nativo do Veo (som ambiente/SFX que casa com a cena)
 }) {
   const accessToken = await getAccessToken();
   const supportedImage = await ensureSupportedImage(imagePath);
@@ -71,6 +72,7 @@ export async function generateVideoClip({
       resolution,
       durationSeconds,
       sampleCount: 1,
+      generateAudio: ambiente !== false,
     },
   });
 

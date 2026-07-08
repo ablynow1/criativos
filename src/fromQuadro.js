@@ -57,6 +57,7 @@ async function main() {
     narracao: cfg.narracao,
     voz: cfg.voz,
     estiloLegenda: cfg.estiloLegenda || 'contorno',
+    audio: cfg.audio || {},
     cenas: cfg.cenas.map((c) => ({ imagem: scenePath, prompt: c.prompt, duracaoSegundos: c.duracao || 8 })),
   };
   await runPipeline(project, { tmpDir, outputPath });

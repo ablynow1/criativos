@@ -4,15 +4,22 @@ import { generateVideoClip } from './generateVideoClip.js';
 import { kenBurns } from './kenBurns.js';
 import { generateNarration } from './generateNarration.js';
 import { generateSubtitles } from './generateSubtitles.js';
+import { generateMusic, MUSIC_MOODS } from './musicGen.js';
 import { mergeFinal } from './mergeFinal.js';
 import { getDurationSeconds } from './ffmpeg.js';
 
 /**
- * Roda o pipeline completo (TTS → Veo → legenda → merge) a partir de um
- * objeto de projeto ({ narracao, cenas, voz?, estiloLegenda? }).
+ * Roda o pipeline completo (TTS → [trilha] → Veo+áudio nativo → legenda → mix) a
+ * partir de um objeto de projeto:
+ *   { narracao, cenas, voz?, estiloLegenda?, audio?: { ambiente?: bool, musica?: mood|'nenhuma' } }
+ * - `audio.ambiente` (default true): som nativo do Veo como camada de realismo.
+ * - `audio.musica` (default 'nenhuma'): trilha Lyria — emocional|energetica|epica|suave|misteriosa.
  */
 export async function runPipeline(project, { tmpDir, outputPath }) {
   const { narracao, cenas, voz, estiloLegenda } = project;
+  const audio = project.audio || {};
+  const ambiente = audio.ambiente !== false;
+  const mood = audio.musica && audio.musica !== 'nenhuma' ? audio.musica : null;
 
   if (!narracao || !Array.isArray(cenas) || cenas.length === 0) {
     throw new Error('projeto precisa de "narracao" (string) e "cenas" (array de {imagem, prompt})');
@@ -35,7 +42,19 @@ export async function runPipeline(project, { tmpDir, outputPath }) {
     );
   }
 
-  console.log(`[2/4] Gerando ${cenas.length} clipe(s) de vídeo via Veo (isso pode levar alguns minutos)...`);
+  let musicPath = null;
+  if (mood) {
+    console.log(`[1.5/4] Gerando trilha musical (Lyria, mood: ${mood})...`);
+    try {
+      musicPath = path.join(tmpDir, 'trilha.wav');
+      await generateMusic({ mood, outputPath: musicPath });
+    } catch (err) {
+      console.warn(`   ⚠️  trilha falhou (${err.message.slice(0, 120)}) — seguindo sem música.`);
+      musicPath = null;
+    }
+  }
+
+  console.log(`[2/4] Gerando ${cenas.length} clipe(s) de vídeo via Veo${ambiente ? ' +áudio nativo' : ''} (isso pode levar alguns minutos)...`);
   const clipPaths = [];
   for (let i = 0; i < cenas.length; i += 1) {
     const cena = cenas[i];
@@ -50,6 +69,7 @@ export async function runPipeline(project, { tmpDir, outputPath }) {
         aspectRatio: '9:16',
         resolution: '1080p',
         durationSeconds: dur,
+        ambiente,
       });
     } catch (err) {
       if (err.code === 'VEO_RAI_BLOCKED') {
@@ -71,7 +91,7 @@ export async function runPipeline(project, { tmpDir, outputPath }) {
     outputSrtPath: srtPath,
   });
 
-  console.log(`[4/4] Montando vídeo final (áudio + legenda queimada)...`);
+  console.log(`[4/4] Mixando vídeo final (narração + ambiente + trilha, master -14 LUFS)...`);
   await mergeFinal({
     clipPaths,
     narrationAudioPath,
@@ -79,6 +99,8 @@ export async function runPipeline(project, { tmpDir, outputPath }) {
     outputPath,
     tmpDir,
     subtitleStyle: estiloLegenda,
+    musicPath,
+    ambiente,
   });
 
   console.log(`\n✅ Pronto: ${outputPath}`);

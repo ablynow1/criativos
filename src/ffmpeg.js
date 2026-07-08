@@ -29,3 +29,15 @@ export async function getDurationSeconds(filePath) {
   ]);
   return parseFloat(stdout.trim());
 }
+
+/** True se o arquivo tem pelo menos uma faixa de áudio. */
+export async function hasAudioStream(filePath) {
+  const { stdout } = await execFileAsync(FFPROBE_BIN, [
+    '-v', 'error',
+    '-select_streams', 'a',
+    '-show_entries', 'stream=codec_type',
+    '-of', 'default=noprint_wrappers=1:nokey=1',
+    filePath,
+  ]);
+  return stdout.trim().length > 0;
+}

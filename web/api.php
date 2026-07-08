@@ -94,6 +94,27 @@ function seed_presets(): array {
       ['id' => rid('gc_'), 'nome' => 'História 1ª pessoa (POV filho)', 'texto' => 'Meu pai jura que não quer nada no Dia dos Pais.'],
       ['id' => rid('gc_'), 'nome' => 'Prova emocional', 'texto' => 'Quando ele viu, sorriu igual criança.'],
     ],
+    'arquetipos' => [
+      ['id' => 'arq_reveal', 'nome' => 'Reveal do Quadro (Malta)', 'dica' => 'Gancho: história 1ª pessoa ("Meu pai jura que não quer nada…"). A emoção É a prova. CTA com deadline real.', 'cenas' => [
+        ['prompt' => 'Authentic handheld smartphone footage look, vertical 9:16, photorealistic. Gentle slow push-in on the person holding the framed artwork at chest height, their moved grateful smile slowly deepening, eyes glistening. Natural window light, subtle camera sway, cozy home ambience sounds. Identity fully preserved. No text overlays.', 'duracao' => 8],
+        ['prompt' => 'Authentic handheld smartphone footage look, vertical 9:16, photorealistic. Slow push toward the framed artwork clearly revealing the portrait inside the ornate frame, then a soft settle back to the emotional face. Warm golden light, shallow depth of field, quiet room tone with soft fabric rustle. No text overlays.', 'duracao' => 8],
+      ]],
+      ['id' => 'arq_ugc', 'nome' => 'UGC Depoimento (look nativo)', 'dica' => 'Parecer conteúdo, não anúncio. Gancho falado em 1ª pessoa nos primeiros 3s. Voz com energia de amiga contando novidade.', 'cenas' => [
+        ['prompt' => 'Authentic UGC smartphone selfie-style footage, vertical 9:16, photorealistic. The person talks casually toward camera with natural expressions and hand gestures, sitting in a bright everyday room. Slightly imperfect framing, natural daylight, real skin texture, casual authentic vibe, soft room ambience. No text overlays.', 'duracao' => 8],
+        ['prompt' => 'Authentic UGC smartphone footage, vertical 9:16, photorealistic. Close handheld shot of the product being shown to camera, fingers pointing at details, natural light with slight motion blur, genuine unpolished feel, subtle handling sounds. No text overlays.', 'duracao' => 8],
+      ]],
+      ['id' => 'arq_pas', 'nome' => 'Problema → Virada (PAS)', 'dica' => 'Cena 1 espelha a DOR (sem produto). Cena 2 é a virada com o produto. Narração: problema → agitação → solução → CTA.', 'cenas' => [
+        ['prompt' => 'Cinematic vertical 9:16, photorealistic. The person looks frustrated or unsure in an everyday setting, subtle tension in the expression, muted colors, slightly desaturated grade, quiet uneasy ambience. Natural light. No text overlays.', 'duracao' => 8],
+        ['prompt' => 'Cinematic vertical 9:16, photorealistic. Mood flips: warm bright colors, the person now smiling with relief and joy while engaging with the product, uplifting energy, golden light, cozy ambient sounds. No text overlays.', 'duracao' => 8],
+      ]],
+      ['id' => 'arq_presente', 'nome' => 'Presente Entregue (reação)', 'dica' => 'A reação de quem RECEBE é o anúncio. Gancho: "Filmei a reação do meu pai…". Prova emocional pura.', 'cenas' => [
+        ['prompt' => 'Authentic handheld smartphone footage, vertical 9:16, photorealistic. One person hands a wrapped gift to another; anticipation on both faces, cozy living room, natural light, genuine candid family moment, soft paper rustling ambience. No text overlays.', 'duracao' => 8],
+        ['prompt' => 'Authentic handheld smartphone footage, vertical 9:16, photorealistic. The person unwraps and sees the framed artwork — genuine emotional reaction, hand to chest, teary joyful smile, the other person smiling behind. Warm light, heartfelt ambience. No text overlays.', 'duracao' => 8],
+      ]],
+      ['id' => 'arq_demo', 'nome' => 'Produto Direto (retargeting)', 'dica' => 'Produto no frame 1 — quem já conhece só precisa do empurrão. Narração curta: benefício + oferta + CTA forte.', 'cenas' => [
+        ['prompt' => 'Premium product showcase, vertical 9:16, photorealistic. The framed artwork prominently displayed on a beautiful living room wall, slow elegant dolly-in revealing fine details of the frame and art, perfect warm lighting, upscale interior, subtle room ambience. No text overlays.', 'duracao' => 8],
+      ]],
+    ],
     'vozes' => [
       ['id' => 'pt-BR-Neural2-B', 'label' => 'Masculina · quente (Neural2-B)', 'genero' => 'M'],
       ['id' => 'pt-BR-Wavenet-B', 'label' => 'Masculina · firme (Wavenet-B)', 'genero' => 'M'],
@@ -115,7 +136,7 @@ if ($presets === null) {
 } else {
   // backfill de chaves novas (ex.: quadros/molduras) sem apagar o que o usuário editou
   $seed = null;
-  foreach (['quadros', 'molduras', 'estilos', 'templates', 'ganchos', 'vozes'] as $k) {
+  foreach (['quadros', 'molduras', 'estilos', 'templates', 'ganchos', 'vozes', 'arquetipos'] as $k) {
     if (!isset($presets[$k])) { $seed = $seed ?? seed_presets(); $presets[$k] = $seed[$k] ?? []; }
   }
   if ($seed !== null) jwrite('presets.json', $presets);
@@ -292,7 +313,7 @@ switch ($action) {
     require_login();
     $b = body();
     $tipo = (string)($b['tipo'] ?? '');
-    if (!in_array($tipo, ['estilos', 'templates', 'ganchos', 'vozes', 'quadros', 'molduras'], true)) fail('tipo inválido');
+    if (!in_array($tipo, ['estilos', 'templates', 'ganchos', 'vozes', 'quadros', 'molduras', 'arquetipos'], true)) fail('tipo inválido');
     $items = $b['items'] ?? null;
     if (!is_array($items)) fail('items inválido');
     $p = jread('presets.json', seed_presets());

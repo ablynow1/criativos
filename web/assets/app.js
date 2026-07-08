@@ -78,6 +78,30 @@ function estimate(narracao) {
   return { words, sec, scenes: Math.max(1, Math.round(sec / durCena())) };
 }
 
+// Score DR (0-100) — heurísticas de direct response pra Meta Ads
+function scoreDR(text, nCenas) {
+  const t = (text || '').trim();
+  if (!t) return { score: 0, tips: [] };
+  const tips = [];
+  let s = 0;
+  const first = (t.split(/[.!?…]+/)[0] || '').trim();
+  const fw = first.split(/\s+/).filter(Boolean).length;
+  if (fw > 0 && fw <= 9) s += 15; else tips.push('gancho: 1ª frase com até 9 palavras');
+  if (/\?|\d/.test(first) || /\b(voc[eê]|teu|tua|seu|sua)\b/i.test(first)) s += 15;
+  else tips.push('gancho: pergunta, número ou "você/seu" na 1ª frase');
+  if (/\b(pe[cç]a|fa[cç]a|garanta|veja|clique|toque|aproveite|manda|mande|crie|monte|transforme|comece|teste|baixe|acesse)\b/i.test(t.slice(-90))) s += 20;
+  else tips.push('CTA imperativo no final');
+  if (/\b(hoje|agora|antes d[eo]|últim|dia d[oa]s?\s|amanh[ãa]|s[óo]\s+at[ée])\b/i.test(t)) s += 10;
+  else tips.push('urgência/deadline real');
+  if (/\d/.test(t)) s += 10; else tips.push('um número concreto dá credibilidade');
+  const lint = lintNarracao(t, nCenas);
+  if (!lint.some(l => l.level === 'bad')) s += 20; else tips.push('resolver o bloqueio ⛔');
+  const est = estimate(t);
+  if (nCenas > 0 && Math.abs(est.sec - nCenas * durCena()) <= 2.5) s += 10;
+  else tips.push('casar duração da fala com o vídeo');
+  return { score: Math.min(100, s), tips: tips.slice(0, 3) };
+}
+
 // Linter — implementa a régua de narração (anti-IA + verdade do produto)
 function lintNarracao(text, nCenas) {
   const out = [];
@@ -111,6 +135,7 @@ function novoCriativo() {
     id: null, nome: '', modo: 'manual', lp_url: '',
     ref_foto: '', quadro_prompt_id: '', quadro_prompt: '', moldura: 'ornate-gold', cenario: '',
     narracao: '', voz: d.voz || 'pt-BR-Neural2-B', estiloLegenda: d.estiloLegenda || 'contorno',
+    audio: { ambiente: true, musica: 'emocional' },
     cenas: [{ imagem: '', prompt: '', duracao: durCena() }], notas: '',
   };
 }
@@ -250,6 +275,7 @@ function renderEditor() {
         <span class="m"><b id="m-w">${est.words}</b> palavras</span>
         <span class="m">≈ <b id="m-s">${est.sec.toFixed(1)}</b>s falados</span>
         <span class="m">sugere <b id="m-c">${est.scenes}</b> cena(s)</span>
+        <span class="m">nota DR <b id="m-dr">–</b></span>
       </div>
       <div class="lint" id="lint"></div>
       <div class="spacer"></div>
@@ -260,8 +286,24 @@ function renderEditor() {
     <div class="card">
       <h3>Cenas — movimento do vídeo (${c.cenas.length})</h3>
       ${modo === 'quadro' ? '<div class="hint" style="margin-bottom:10px">No modo quadro, todas as cenas animam a MESMA imagem gerada (o avatar segurando o quadro). Aqui você só descreve o movimento de câmera de cada trecho.</div>' : ''}
+      <button class="btn block" id="arquetipo" style="margin-bottom:12px">⚡ Aplicar arquétipo de criativo…</button>
       <div id="cenas">${c.cenas.map((cn, i) => sceneHTML(cn, i, c.cenas.length, modo !== 'quadro')).join('')}</div>
       <button class="btn block" id="addCena">${I.plus} Adicionar cena</button>
+    </div>`;
+
+  const au = c.audio || {};
+  const audioCard = `
+    <div class="card">
+      <h3>Áudio · trilha + som ambiente</h3>
+      <label class="f"><span class="lbl">Trilha musical (gerada por IA)</span>
+        <select class="in" id="f-musica">
+          ${[['nenhuma', 'Sem música'], ['emocional', 'Emocional · piano e cordas'], ['energetica', 'Energética · pop moderno'], ['epica', 'Épica · orquestral'], ['suave', 'Suave · violão e pads'], ['misteriosa', 'Misteriosa · atmosférica']]
+            .map(([v, l]) => `<option value="${v}" ${(au.musica || 'nenhuma') === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></label>
+      <div class="chips">
+        <button class="chip ${au.ambiente !== false ? 'on' : ''}" id="f-ambiente">${au.ambiente !== false ? '🔊' : '🔇'} Som ambiente da cena (Veo)</button>
+      </div>
+      <div class="hint" style="margin-top:8px">A narração fica sempre na frente: música e ambiente abaixam sozinhos quando a voz fala (ducking). Master em -14 LUFS, padrão do Meta.</div>
     </div>`;
 
   shell(`
@@ -285,6 +327,7 @@ function renderEditor() {
     ${modo === 'lp' ? lpCard : ''}
     ${modo === 'quadro' ? quadroCard : ''}
     ${modo !== 'lp' ? narracaoCard + cenasCard : ''}
+    ${audioCard}
 
     <div class="card">
       <h3>Voz & legenda</h3>
@@ -347,6 +390,11 @@ function bEditor() {
   $$('[data-modo]').forEach(b => b.onclick = () => { c.modo = b.dataset.modo; renderEditor(); });
   $$('[data-leg]').forEach(b => b.onclick = () => { c.estiloLegenda = b.dataset.leg; renderEditor(); });
 
+  // áudio (todos os modos)
+  c.audio = c.audio || { ambiente: true, musica: 'nenhuma' };
+  $('#f-musica').onchange = (e) => c.audio.musica = e.target.value;
+  $('#f-ambiente').onclick = () => { c.audio.ambiente = c.audio.ambiente === false; renderEditor(); };
+
   if (c.modo === 'quadro') {
     $('#ref-btn').onclick = () => pickImage(url => { c.ref_foto = url; renderEditor(); });
     $('#ref-box').onclick = () => pickImage(url => { c.ref_foto = url; renderEditor(); });
@@ -363,8 +411,16 @@ function bEditor() {
       $('#m-w').textContent = est.words;
       $('#m-s').textContent = est.sec.toFixed(1);
       $('#m-c').textContent = est.scenes;
-      $('#lint').innerHTML = lintNarracao(c.narracao, c.cenas.length)
-        .map(l => `<div class="li ${l.level}">${l.level === 'bad' ? '⛔' : l.level === 'warn' ? '⚠️' : '✅'} ${esc(l.msg)}</div>`).join('');
+      const dr = scoreDR(c.narracao, c.cenas.length);
+      const drEl = $('#m-dr');
+      drEl.textContent = dr.score + '/100';
+      drEl.style.color = dr.score >= 80 ? 'var(--ok)' : dr.score >= 55 ? 'var(--gold2)' : 'var(--err)';
+      const lints = lintNarracao(c.narracao, c.cenas.length)
+        .map(l => `<div class="li ${l.level}">${l.level === 'bad' ? '⛔' : l.level === 'warn' ? '⚠️' : '✅'} ${esc(l.msg)}</div>`);
+      if (dr.tips.length && (c.narracao || '').trim()) {
+        lints.push(`<div class="li warn">📈 Pra subir a nota: ${esc(dr.tips.join(' · '))}</div>`);
+      }
+      $('#lint').innerHTML = lints.join('');
     };
     $('#f-narracao').oninput = (e) => { c.narracao = e.target.value; upd(); };
     upd();
@@ -375,6 +431,12 @@ function bEditor() {
       renderEditor();
     });
 
+    $('#arquetipo').onclick = () => pickArquetipo((a) => {
+      const keepImg = c.cenas[0]?.imagem || '';
+      c.cenas = a.cenas.map(cn => ({ imagem: keepImg, prompt: cn.prompt, duracao: cn.duracao || durCena() }));
+      renderEditor();
+      toast('arquétipo aplicado — ' + a.nome);
+    });
     $('#addCena').onclick = () => { c.cenas.push({ imagem: c.cenas.at(-1)?.imagem || '', prompt: '', duracao: durCena() }); renderEditor(); };
     $$('.scene').forEach(sc => {
       const i = +sc.dataset.i;
@@ -441,6 +503,19 @@ function pickImage(cb) {
     S.uploadBusy = false;
   };
   inp.click();
+}
+
+function pickArquetipo(cb) {
+  const arqs = S.presets?.arquetipos || [];
+  drawer(`<h2>Arquétipos de criativo</h2>
+    <div class="hint" style="margin-bottom:12px">Estruturas de anúncio comprovadas em DR — substituem suas cenas por um roteiro visual pronto (a dica de gancho vem junto).</div>
+    ${arqs.map(a => `<div class="preset" data-id="${esc(a.id)}" style="cursor:pointer">
+      <div class="t">${esc(a.nome)} <span class="hint">· ${(a.cenas || []).length} cena(s)</span></div>
+      <div class="x">${esc(a.dica || '')}</div></div>`).join('') || '<div class="empty">sem arquétipos — adicione na Biblioteca</div>'}`,
+    (dr) => $$('.preset', dr).forEach(p => p.onclick = () => {
+      const a = arqs.find(x => x.id === p.dataset.id);
+      closeDrawer(); if (a) cb(a);
+    }));
 }
 
 function pickQuadro(cb) {
@@ -529,6 +604,7 @@ function bGaleria() {}
 function vBiblioteca() {
   const p = S.presets || {};
   const secs = [
+    ['arquetipos', 'Arquétipos de criativo (DR)', 'Estruturas de anúncio comprovadas — roteiro visual pronto por objetivo.'],
     ['quadros', 'Estilos de quadro (por projeto)', 'Os prompts que geram a arte que o avatar segura. Um por estilo de cada projeto Malta.'],
     ['molduras', 'Molduras', 'A moldura da cena "avatar segurando o quadro".'],
     ['estilos', 'Estilos de arte ({STYLE})', 'Fragmentos que entram no template mestre do retrato.'],
@@ -547,7 +623,8 @@ function vBiblioteca() {
         ${(p[k] || []).map((it, i) => `
           <div class="preset" data-i="${i}">
             <div class="t">${esc(it.nome || it.label || it.id)}</div>
-            ${it.texto ? `<div class="x ${it.texto.length > 220 ? 'fade' : ''}">${esc(it.texto)}</div>` : `<div class="x">${esc(it.id)}</div>`}
+            ${it.texto ? `<div class="x ${it.texto.length > 220 ? 'fade' : ''}">${esc(it.texto)}</div>` :
+              it.dica ? `<div class="x">${esc(it.dica)} · ${(it.cenas || []).length} cena(s)</div>` : `<div class="x">${esc(it.id)}</div>`}
             <div class="row" style="margin-top:9px">
               <button class="btn sm grow p-copy">${I.copy} Copiar</button>
               <button class="btn sm grow p-edit">Editar</button>
@@ -565,7 +642,7 @@ function bBiblioteca() {
     $$('.preset', acc).forEach(pr => {
       const i = +pr.dataset.i;
       const item = S.presets[k][i];
-      $('.p-copy', pr).onclick = () => { navigator.clipboard.writeText(item.texto || item.id); toast('copiado'); };
+      $('.p-copy', pr).onclick = () => { navigator.clipboard.writeText(item.texto || item.dica || item.id); toast('copiado'); };
       $('.p-del', pr).onclick = async () => {
         if (!confirm('Excluir "' + (item.nome || item.label || item.id) + '"?')) return;
         S.presets[k].splice(i, 1);
@@ -578,8 +655,8 @@ function bBiblioteca() {
   });
 }
 function editPreset(tipo, idx) {
-  const kind = tipo === 'vozes' ? 'voz' : tipo === 'molduras' ? 'moldura' : tipo === 'quadros' ? 'quadro' : 'texto';
-  const blank = { voz: { id: '', label: '', genero: 'M' }, moldura: { id: '', label: '' }, quadro: { id: '', grupo: '', nome: '', texto: '' }, texto: { id: '', nome: '', texto: '' } }[kind];
+  const kind = tipo === 'vozes' ? 'voz' : tipo === 'molduras' ? 'moldura' : tipo === 'quadros' ? 'quadro' : tipo === 'arquetipos' ? 'arquetipo' : 'texto';
+  const blank = { voz: { id: '', label: '', genero: 'M' }, moldura: { id: '', label: '' }, quadro: { id: '', grupo: '', nome: '', texto: '' }, arquetipo: { id: '', nome: '', dica: '', cenas: [] }, texto: { id: '', nome: '', texto: '' } }[kind];
   const item = idx >= 0 ? S.presets[tipo][idx] : blank;
   const forms = {
     voz: `<label class="f"><span class="lbl">ID da voz (Google)</span><input class="in" id="p-a" value="${esc(item.id)}" placeholder="pt-BR-Neural2-B"></label>
@@ -589,6 +666,10 @@ function editPreset(tipo, idx) {
     quadro: `<label class="f"><span class="lbl">Grupo (projeto)</span><input class="in" id="p-g" value="${esc(item.grupo || '')}" placeholder="Pinturapai (Dia dos Pais)"></label>
       <label class="f"><span class="lbl">Nome</span><input class="in" id="p-a" value="${esc(item.nome)}"></label>
       <label class="f"><span class="lbl">Prompt do quadro (img2img)</span><textarea class="in" id="p-b" rows="10">${esc(item.texto)}</textarea></label>`,
+    arquetipo: `<label class="f"><span class="lbl">Nome</span><input class="in" id="p-a" value="${esc(item.nome)}"></label>
+      <label class="f"><span class="lbl">Dica de gancho/copy</span><input class="in" id="p-g" value="${esc(item.dica || '')}"></label>
+      <label class="f"><span class="lbl">Cenas — 1 por linha, formato "8|prompt em inglês"</span>
+      <textarea class="in" id="p-b" rows="8" placeholder="8|Authentic handheld smartphone footage...">${esc((item.cenas || []).map(cn => `${cn.duracao || 8}|${cn.prompt}`).join('\n'))}</textarea></label>`,
     texto: `<label class="f"><span class="lbl">Nome</span><input class="in" id="p-a" value="${esc(item.nome)}"></label>
       <label class="f"><span class="lbl">Texto</span><textarea class="in" id="p-b" rows="8">${esc(item.texto)}</textarea></label>`,
   };
@@ -601,6 +682,14 @@ function editPreset(tipo, idx) {
         if (kind === 'voz') novo = { id: a, label: b, genero: item.genero || 'M' };
         else if (kind === 'moldura') novo = { id: a, label: b };
         else if (kind === 'quadro') novo = { id: item.id || ('qd_' + Date.now().toString(36)), grupo: ($('#p-g', dr).value.trim() || 'Outros'), nome: a, texto: b };
+        else if (kind === 'arquetipo') {
+          const cenas = b.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+            const m = l.match(/^(\d+)\s*\|\s*(.+)$/);
+            return m ? { duracao: +m[1], prompt: m[2] } : { duracao: 8, prompt: l };
+          });
+          if (!cenas.length) return toast('adicione ao menos 1 cena', true);
+          novo = { id: item.id || ('arq_' + Date.now().toString(36)), nome: a, dica: $('#p-g', dr).value.trim(), cenas };
+        }
         else novo = { id: item.id || ('p_' + Date.now().toString(36)), nome: a, texto: b };
         if (idx >= 0) S.presets[tipo][idx] = novo; else S.presets[tipo].push(novo);
         try {

@@ -65,6 +65,10 @@ async function main() {
     narracao: briefing.narracao,
     voz: briefing.voz,
     estiloLegenda: args.estilo || 'contorno',
+    audio: {
+      ...(typeof args.musica === 'string' ? { musica: args.musica } : {}),
+      ...(args['sem-ambiente'] === true ? { ambiente: false } : {}),
+    },
     cenas: briefing.cenas.map((cena) => ({ imagem: imagePath, prompt: cena.prompt })),
   };
 

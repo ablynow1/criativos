@@ -21,11 +21,16 @@ async function main() {
   const outputPath = args.out || 'output/final.mp4';
 
   if (!configPath) {
-    console.error('Uso: node src/index.js --config inputs/projeto.json [--out output/final.mp4]');
+    console.error('Uso: node src/index.js --config inputs/projeto.json [--out output/final.mp4] [--musica emocional] [--sem-ambiente]');
     process.exit(1);
   }
 
   const project = JSON.parse(await readFile(configPath, 'utf-8'));
+  // overrides de CLI pro áudio
+  project.audio = project.audio || {};
+  if (typeof args.musica === 'string') project.audio.musica = args.musica;
+  if (args['sem-ambiente'] === true) project.audio.ambiente = false;
+
   const tmpDir = path.join('tmp', path.basename(configPath, '.json'));
   await runPipeline(project, { tmpDir, outputPath });
 }
