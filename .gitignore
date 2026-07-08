@@ -6,3 +6,6 @@ tmp/*
 !tmp/.gitkeep
 output/*.mp4
 !output/.gitkeep
+web/data/
+web/media/
+tmp/cricri/
