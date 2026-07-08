@@ -79,6 +79,8 @@ function stageFromLine(l, nCenas) {
   if (l.includes('[LP 1/3]')) return [5, 'lendo a landing page'];
   if (l.includes('[LP 2/3]')) return [10, 'briefing com Gemini'];
   if (l.includes('[LP 3/3]')) return [14, 'gerando imagem do produto'];
+  if (l.includes('[Q 1/2]')) return [8, 'gerando o quadro (foto → arte → avatar segurando)'];
+  if (l.includes('[Q 2/2]')) return [15, 'gerando clipes no Veo'];
   return [null, null];
 }
 
@@ -92,6 +94,25 @@ async function processJob(job) {
   if (snap.modo === 'lp') {
     args = ['src/fromLandingPage.js', '--url', snap.lp_url, '--slug', `cricri-${job.id}`,
       '--estilo', snap.estiloLegenda || 'contorno', '--out', outPath];
+  } else if (snap.modo === 'quadro') {
+    // baixa a foto de referência do avatar e monta o config do modo quadro
+    await progress(job.id, 3, 'baixando foto de referência');
+    const ext = (snap.ref_foto.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+    const refLocal = path.join(jobDir, `ref.${ext}`);
+    await download(snap.ref_foto, refLocal);
+    const cfg = {
+      refFoto: refLocal,
+      quadroPrompt: snap.quadro_prompt,
+      moldura: snap.moldura || 'ornate-gold',
+      cenario: snap.cenario || undefined,
+      narracao: snap.narracao,
+      voz: snap.voz,
+      estiloLegenda: snap.estiloLegenda || 'contorno',
+      cenas: (snap.cenas || []).map((c) => ({ prompt: c.prompt, duracao: c.duracao || 8 })),
+    };
+    const cfgPath = path.join(jobDir, 'quadro.json');
+    await writeFile(cfgPath, JSON.stringify(cfg, null, 2));
+    args = ['src/fromQuadro.js', '--config', cfgPath, '--out', outPath];
   } else {
     // baixa imagens das cenas e monta o projeto.json do pipeline
     const cenas = [];

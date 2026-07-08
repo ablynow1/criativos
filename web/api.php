@@ -74,9 +74,15 @@ function seed_config(): array {
 
 function seed_presets(): array {
   $sacred = "Create a portrait artwork based on the attached reference photo.\n\nTHE FACE IS SACRED — photographic likeness above all. The reference photo is the absolute source of truth: preserve EVERY person's exact facial features, skin tone, hair, beard and moustache density, apparent age and expression with total precision. Do NOT straighten curly or coily hair and do NOT change its texture. Add no facial hair that is not in the photo. Keep ONLY the accessories visible in the photo (glasses, caps, earrings); if there are none, add none. If more than one person appears in the photo, render ALL of them together, each one instantly and unmistakably themselves.\n\nSTYLE: {STYLE}\n\nCOMPOSITION: vertical portrait framing. The subject's head and shoulders — and the full group, if there is more than one person — must sit comfortably inside the frame, centered, with gentle margins. Never crop a face, never zoom in awkwardly.\n\nNO TEXT: do NOT write any words, names, letters, signatures, captions or numbers anywhere in the image.\n\nBACKGROUND LOCK: output ONE fully OPAQUE image that fills the entire frame edge to edge. NEVER output a transparent background, an alpha cutout, a floating/isolated subject, or a flat solid-colour background. Every pixel must be part of the image.\n\nNO PICTURE FRAME: do NOT add any decorative picture frame, gilded border, mat, passe-partout or vignette around the image. The artwork itself reaches all four edges.";
+  $quadros = @include __DIR__ . '/quadros_seed.php';
+  if (!is_array($quadros)) $quadros = [];
   return [
-    'estilos' => [
-      ['id' => rid('st_'), 'nome' => 'Óleo Clássico', 'texto' => 'a warm, timeless classical OIL PAINTING portrait in the tradition of the old masters — visible expressive oil brushstrokes and gentle impasto, soft Rembrandt-like warm directional lighting (chiaroscuro), a deep muted painterly background of warm browns, deep greens and soft golden bokeh. Dignified, intimate and heirloom-like.'],
+    'quadros' => $quadros,
+    'molduras' => [
+      ['id' => 'ornate-gold', 'label' => 'Dourada ornamentada (a do site)'],
+      ['id' => 'natural-wood', 'label' => 'Madeira natural'],
+      ['id' => 'thin-black', 'label' => 'Preta fina moderna'],
+      ['id' => 'baroque-silver', 'label' => 'Prata barroca'],
     ],
     'templates' => [
       ['id' => rid('tp_'), 'nome' => 'Retrato — template mestre (FACE IS SACRED)', 'texto' => $sacred],
@@ -104,7 +110,16 @@ function seed_presets(): array {
 $config = jread('config.json', null);
 if ($config === null) { $config = seed_config(); jwrite('config.json', $config); }
 $presets = jread('presets.json', null);
-if ($presets === null) { $presets = seed_presets(); jwrite('presets.json', $presets); }
+if ($presets === null) {
+  $presets = seed_presets(); jwrite('presets.json', $presets);
+} else {
+  // backfill de chaves novas (ex.: quadros/molduras) sem apagar o que o usuário editou
+  $seed = null;
+  foreach (['quadros', 'molduras', 'estilos', 'templates', 'ganchos', 'vozes'] as $k) {
+    if (!isset($presets[$k])) { $seed = $seed ?? seed_presets(); $presets[$k] = $seed[$k] ?? []; }
+  }
+  if ($seed !== null) jwrite('presets.json', $presets);
+}
 
 // ---------- auth ----------
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
@@ -167,15 +182,20 @@ switch ($action) {
     $c['nome'] = trim((string)($c['nome'] ?? ''));
     if ($c['nome'] === '') fail('dá um nome pro criativo');
     $modo = $c['modo'] ?? 'manual';
-    if (!in_array($modo, ['manual', 'lp'], true)) fail('modo inválido');
+    if (!in_array($modo, ['manual', 'lp', 'quadro'], true)) fail('modo inválido');
     if ($modo === 'lp' && !filter_var($c['lp_url'] ?? '', FILTER_VALIDATE_URL)) fail('URL da LP inválida');
-    if ($modo === 'manual') {
+    if (in_array($modo, ['manual', 'quadro'], true)) {
       if (trim((string)($c['narracao'] ?? '')) === '') fail('narração vazia');
       if (empty($c['cenas']) || !is_array($c['cenas'])) fail('adicione ao menos 1 cena');
       foreach ($c['cenas'] as $i => $cena) {
-        if (trim((string)($cena['prompt'] ?? '')) === '') fail('cena ' . ($i + 1) . ' sem prompt');
-        if (empty($cena['imagem'])) fail('cena ' . ($i + 1) . ' sem imagem de referência');
+        if (trim((string)($cena['prompt'] ?? '')) === '') fail('cena ' . ($i + 1) . ' sem prompt de movimento');
+        // no modo quadro a imagem é gerada; só o manual exige imagem de referência por cena
+        if ($modo === 'manual' && empty($cena['imagem'])) fail('cena ' . ($i + 1) . ' sem imagem de referência');
       }
+    }
+    if ($modo === 'quadro') {
+      if (empty($c['ref_foto'])) fail('envie a foto de referência do avatar');
+      if (trim((string)($c['quadro_prompt'] ?? '')) === '') fail('escolha o estilo do quadro');
     }
     $list = jread('criativos.json', []);
     $c['updated_at'] = now();
@@ -272,7 +292,7 @@ switch ($action) {
     require_login();
     $b = body();
     $tipo = (string)($b['tipo'] ?? '');
-    if (!in_array($tipo, ['estilos', 'templates', 'ganchos', 'vozes'], true)) fail('tipo inválido');
+    if (!in_array($tipo, ['estilos', 'templates', 'ganchos', 'vozes', 'quadros', 'molduras'], true)) fail('tipo inválido');
     $items = $b['items'] ?? null;
     if (!is_array($items)) fail('items inválido');
     $p = jread('presets.json', seed_presets());

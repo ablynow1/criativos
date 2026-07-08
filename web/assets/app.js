@@ -109,6 +109,7 @@ function novoCriativo() {
   const d = S.config?.defaults || {};
   return {
     id: null, nome: '', modo: 'manual', lp_url: '',
+    ref_foto: '', quadro_prompt_id: '', quadro_prompt: '', moldura: 'ornate-gold', cenario: '',
     narracao: '', voz: d.voz || 'pt-BR-Neural2-B', estiloLegenda: d.estiloLegenda || 'contorno',
     cenas: [{ imagem: '', prompt: '', duracao: durCena() }], notas: '',
   };
@@ -167,15 +168,16 @@ function render() {
 // ============ ESTÚDIO (lista) ============
 function vEstudio() {
   const list = S.criativos.map(c => {
-    const thumb = c.cenas?.[0]?.imagem;
+    const thumb = c.modo === 'quadro' ? c.ref_foto : c.cenas?.[0]?.imagem;
     const job = jobDoCriativo(c.id);
     const done = S.jobs.find(j => j.criativo_id === c.id && j.status === 'done');
     const est = estimate(c.narracao);
+    const modoTag = c.modo === 'lp' ? 'a partir de LP' : c.modo === 'quadro' ? '🖼️ quadro · ' + `${c.cenas?.length || 0} cena(s)` : `${c.cenas?.length || 0} cena(s) · ~${est.sec.toFixed(0)}s`;
     return `<div class="item" data-id="${c.id}">
       <div class="thumb ${thumb ? '' : 'ph'}" ${thumb ? `style="background-image:url('${esc(thumb)}')"` : ''}>${thumb ? '' : '🎬'}</div>
       <div class="grow">
         <div class="t">${esc(c.nome)}</div>
-        <div class="s">${c.modo === 'lp' ? 'a partir de LP' : `${c.cenas?.length || 0} cena(s) · ~${est.sec.toFixed(0)}s`} · ${esc(c.voz || '')}</div>
+        <div class="s">${modoTag} · ${esc(c.voz || '')}</div>
       </div>
       ${job ? `<span class="pill ${job.status === 'running' ? 'r' : 'q'}">${job.status === 'running' ? 'rodando' : 'na fila'}</span>` : done ? '<span class="pill d">pronto</span>' : ''}
     </div>`;
@@ -199,31 +201,48 @@ function bEstudio() {
 function renderEditor() {
   const c = S.editing;
   const vozes = S.presets?.vozes || [];
-  const isLP = c.modo === 'lp';
+  const modo = c.modo || 'manual';
   const est = estimate(c.narracao);
-  shell(`
-    <div class="row" style="margin:6px 0 12px">
-      <button class="iconbtn" id="back">${I.back}</button>
-      <div class="h1" style="margin:0">${c.id ? 'Editar' : 'Novo'} criativo</div>
-    </div>
+  const modoHint = {
+    manual: 'Você envia a imagem de cada cena + o roteiro. Controle total.',
+    quadro: 'Escolhe o estilo do quadro e envia a foto do avatar — a IA pinta a arte e gera o avatar segurando o quadro emoldurado.',
+    lp: 'Só a URL da landing page — o Gemini escreve o briefing, a narração e gera a imagem sozinho.',
+  }[modo];
 
-    <div class="card">
-      <label class="f"><span class="lbl">Nome</span>
-        <input class="in" id="f-nome" value="${esc(c.nome)}" placeholder="ex: pinturapai — POV filho v2"></label>
-      <span class="lbl" style="display:block;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600">Modo</span>
-      <div class="chips">
-        <button class="chip ${!isLP ? 'on' : ''}" data-modo="manual">Manual · imagem + roteiro</button>
-        <button class="chip ${isLP ? 'on' : ''}" data-modo="lp">Automático · a partir de LP</button>
-      </div>
-    </div>
+  const quadroGroups = {};
+  (S.presets?.quadros || []).forEach(q => { (quadroGroups[q.grupo] ||= []).push(q); });
+  const molduras = S.presets?.molduras || [];
+  const estiloNome = (S.presets?.quadros || []).find(q => q.id === c.quadro_prompt_id)?.nome;
 
-    ${isLP ? `
+  const lpCard = `
     <div class="card">
       <h3>Landing page</h3>
       <label class="f"><span class="lbl">URL da LP</span>
         <input class="in" id="f-lp" type="url" value="${esc(c.lp_url)}" placeholder="https://atelier.usemalta.com/pinturapai"></label>
       <div class="hint">O worker baixa a LP, o Gemini escreve o briefing + narração, gera a imagem e roda o pipeline inteiro sozinho.</div>
-    </div>` : `
+    </div>`;
+
+  const quadroCard = `
+    <div class="card">
+      <h3>O quadro</h3>
+      <div class="row" style="align-items:flex-start;margin-bottom:14px">
+        <div class="imgbox ${c.ref_foto ? 'has' : ''}" id="ref-box" style="width:88px;height:132px;${c.ref_foto ? `background-image:url('${esc(c.ref_foto)}')` : ''}">${c.ref_foto ? '' : 'foto do avatar'}</div>
+        <div class="grow">
+          <div class="hint" style="margin-bottom:8px">Foto de referência do rosto (pai, mãe, criança, pet…). É a partir dela que a arte é pintada.</div>
+          <button class="btn sm block" id="ref-btn">${I.up} ${c.ref_foto ? 'Trocar foto' : 'Enviar foto'}</button>
+        </div>
+      </div>
+      <label class="f"><span class="lbl">Estilo do quadro</span>
+        <button class="btn block" id="pick-quadro" style="justify-content:space-between">
+          <span>${estiloNome ? esc(estiloNome) : 'Escolher estilo…'}</span><span style="color:var(--dim)">▾</span>
+        </button></label>
+      <label class="f"><span class="lbl">Moldura</span>
+        <select class="in" id="f-moldura">${molduras.map(m => `<option value="${esc(m.id)}" ${m.id === (c.moldura || 'ornate-gold') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></label>
+      <label class="f"><span class="lbl">Cenário (opcional)</span>
+        <input class="in" id="f-cenario" value="${esc(c.cenario || '')}" placeholder="ex: a warm cozy living room (deixe vazio pro padrão)"></label>
+    </div>`;
+
+  const narracaoCard = `
     <div class="card">
       <h3>Narração <span style="text-transform:none;letter-spacing:0">· passa pela régua de copy automaticamente</span></h3>
       <textarea class="in" id="f-narracao" rows="4" placeholder="Gancho nos 3 primeiros segundos…">${esc(c.narracao)}</textarea>
@@ -235,13 +254,37 @@ function renderEditor() {
       <div class="lint" id="lint"></div>
       <div class="spacer"></div>
       <div class="chips" id="ganchos">${(S.presets?.ganchos || []).slice(0, 6).map(g => `<button class="chip" data-g="${esc(g.id)}" title="${esc(g.texto)}">+ ${esc(g.nome)}</button>`).join('')}</div>
+    </div>`;
+
+  const cenasCard = `
+    <div class="card">
+      <h3>Cenas — movimento do vídeo (${c.cenas.length})</h3>
+      ${modo === 'quadro' ? '<div class="hint" style="margin-bottom:10px">No modo quadro, todas as cenas animam a MESMA imagem gerada (o avatar segurando o quadro). Aqui você só descreve o movimento de câmera de cada trecho.</div>' : ''}
+      <div id="cenas">${c.cenas.map((cn, i) => sceneHTML(cn, i, c.cenas.length, modo !== 'quadro')).join('')}</div>
+      <button class="btn block" id="addCena">${I.plus} Adicionar cena</button>
+    </div>`;
+
+  shell(`
+    <div class="row" style="margin:6px 0 12px">
+      <button class="iconbtn" id="back">${I.back}</button>
+      <div class="h1" style="margin:0">${c.id ? 'Editar' : 'Novo'} criativo</div>
     </div>
 
     <div class="card">
-      <h3>Cenas (${c.cenas.length})</h3>
-      <div id="cenas">${c.cenas.map((cn, i) => sceneHTML(cn, i, c.cenas.length)).join('')}</div>
-      <button class="btn block" id="addCena">${I.plus} Adicionar cena</button>
-    </div>`}
+      <label class="f"><span class="lbl">Nome</span>
+        <input class="in" id="f-nome" value="${esc(c.nome)}" placeholder="ex: pinturapai — POV filho v2"></label>
+      <span class="lbl" style="display:block;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600">Modo</span>
+      <div class="chips">
+        <button class="chip ${modo === 'manual' ? 'on' : ''}" data-modo="manual">Manual</button>
+        <button class="chip ${modo === 'quadro' ? 'on' : ''}" data-modo="quadro">🖼️ Quadro</button>
+        <button class="chip ${modo === 'lp' ? 'on' : ''}" data-modo="lp">LP automático</button>
+      </div>
+      <div class="hint" style="margin-top:8px">${modoHint}</div>
+    </div>
+
+    ${modo === 'lp' ? lpCard : ''}
+    ${modo === 'quadro' ? quadroCard : ''}
+    ${modo !== 'lp' ? narracaoCard + cenasCard : ''}
 
     <div class="card">
       <h3>Voz & legenda</h3>
@@ -271,7 +314,7 @@ function renderEditor() {
   bEditor();
 }
 
-function sceneHTML(cn, i, total) {
+function sceneHTML(cn, i, total, withImage = true) {
   return `<div class="scene" data-i="${i}">
     <div class="head">
       <span class="num">${i + 1}</span>
@@ -281,7 +324,7 @@ function sceneHTML(cn, i, total) {
       <button class="iconbtn rm">${I.trash}</button>
     </div>
     <div class="row" style="align-items:flex-start">
-      <div class="imgbox ${cn.imagem ? 'has' : ''}" style="${cn.imagem ? `background-image:url('${esc(cn.imagem)}')` : ''}">${cn.imagem ? '' : 'toque p/ enviar imagem 9:16'}</div>
+      ${withImage ? `<div class="imgbox ${cn.imagem ? 'has' : ''}" style="${cn.imagem ? `background-image:url('${esc(cn.imagem)}')` : ''}">${cn.imagem ? '' : 'toque p/ enviar imagem 9:16'}</div>` : ''}
       <div class="grow">
         <textarea class="in scene-prompt" rows="4" placeholder="Prompt de movimento pro Veo (inglês)…">${esc(cn.prompt)}</textarea>
         <div class="row" style="margin-top:8px">
@@ -303,6 +346,14 @@ function bEditor() {
   $('#f-notas').oninput = (e) => c.notas = e.target.value;
   $$('[data-modo]').forEach(b => b.onclick = () => { c.modo = b.dataset.modo; renderEditor(); });
   $$('[data-leg]').forEach(b => b.onclick = () => { c.estiloLegenda = b.dataset.leg; renderEditor(); });
+
+  if (c.modo === 'quadro') {
+    $('#ref-btn').onclick = () => pickImage(url => { c.ref_foto = url; renderEditor(); });
+    $('#ref-box').onclick = () => pickImage(url => { c.ref_foto = url; renderEditor(); });
+    $('#f-moldura').onchange = (e) => c.moldura = e.target.value;
+    $('#f-cenario').oninput = (e) => c.cenario = e.target.value;
+    $('#pick-quadro').onclick = () => pickQuadro((q) => { c.quadro_prompt_id = q.id; c.quadro_prompt = q.texto; renderEditor(); });
+  }
 
   if (c.modo === 'lp') {
     $('#f-lp').oninput = (e) => c.lp_url = e.target.value;
@@ -332,7 +383,8 @@ function bEditor() {
       $('.mv-dn', sc).onclick = () => { if (i < c.cenas.length - 1) { [c.cenas[i + 1], c.cenas[i]] = [c.cenas[i], c.cenas[i + 1]]; renderEditor(); } };
       $('.scene-prompt', sc).oninput = (e) => c.cenas[i].prompt = e.target.value;
       $('.scene-dur', sc).onchange = (e) => c.cenas[i].duracao = +e.target.value;
-      $('.imgbox', sc).onclick = () => pickImage(url => { c.cenas[i].imagem = url; renderEditor(); });
+      const ib = $('.imgbox', sc);
+      if (ib) ib.onclick = () => pickImage(url => { c.cenas[i].imagem = url; renderEditor(); });
       $('.scene-tpl', sc).onclick = () => pickTemplate(t => { c.cenas[i].prompt = t; renderEditor(); });
     });
   }
@@ -389,6 +441,23 @@ function pickImage(cb) {
     S.uploadBusy = false;
   };
   inp.click();
+}
+
+function pickQuadro(cb) {
+  const quadros = S.presets?.quadros || [];
+  const groups = {};
+  quadros.forEach(q => { (groups[q.grupo] ||= []).push(q); });
+  const html = `<h2>Estilo do quadro</h2>
+    <div class="hint" style="margin-bottom:12px">${quadros.length} prompts dos projetos Malta. A arte é pintada a partir da foto de referência.</div>
+    ${Object.entries(groups).map(([g, items]) => `
+      <div class="preset" style="background:transparent;border:0;padding:0;margin-bottom:6px"><div class="t" style="color:var(--gold2)">${esc(g)}</div></div>
+      <div class="chips" style="margin-bottom:14px">
+        ${items.map(q => `<button class="chip q-pick" data-id="${esc(q.id)}" title="${esc(q.texto.slice(0, 160))}…">${esc(q.nome)}</button>`).join('')}
+      </div>`).join('')}`;
+  drawer(html, (dr) => $$('.q-pick', dr).forEach(b => b.onclick = () => {
+    const q = quadros.find(x => x.id === b.dataset.id);
+    closeDrawer(); if (q) cb(q);
+  }));
 }
 
 function pickTemplate(cb) {
@@ -460,6 +529,8 @@ function bGaleria() {}
 function vBiblioteca() {
   const p = S.presets || {};
   const secs = [
+    ['quadros', 'Estilos de quadro (por projeto)', 'Os prompts que geram a arte que o avatar segura. Um por estilo de cada projeto Malta.'],
+    ['molduras', 'Molduras', 'A moldura da cena "avatar segurando o quadro".'],
     ['estilos', 'Estilos de arte ({STYLE})', 'Fragmentos que entram no template mestre do retrato.'],
     ['templates', 'Templates de prompt', 'Prompts prontos — retrato mestre e cenas do Veo.'],
     ['ganchos', 'Ganchos de copy', 'Aberturas testadas pra colar na narração.'],
@@ -507,20 +578,30 @@ function bBiblioteca() {
   });
 }
 function editPreset(tipo, idx) {
-  const isVoz = tipo === 'vozes';
-  const item = idx >= 0 ? S.presets[tipo][idx] : (isVoz ? { id: '', label: '', genero: 'M' } : { id: '', nome: '', texto: '' });
-  drawer(`<h2>${idx >= 0 ? 'Editar' : 'Novo'} — ${tipo}</h2>
-    ${isVoz ? `
-      <label class="f"><span class="lbl">ID da voz (Google)</span><input class="in" id="p-a" value="${esc(item.id)}" placeholder="pt-BR-Neural2-B"></label>
-      <label class="f"><span class="lbl">Label</span><input class="in" id="p-b" value="${esc(item.label)}" placeholder="Masculina · quente"></label>` : `
+  const kind = tipo === 'vozes' ? 'voz' : tipo === 'molduras' ? 'moldura' : tipo === 'quadros' ? 'quadro' : 'texto';
+  const blank = { voz: { id: '', label: '', genero: 'M' }, moldura: { id: '', label: '' }, quadro: { id: '', grupo: '', nome: '', texto: '' }, texto: { id: '', nome: '', texto: '' } }[kind];
+  const item = idx >= 0 ? S.presets[tipo][idx] : blank;
+  const forms = {
+    voz: `<label class="f"><span class="lbl">ID da voz (Google)</span><input class="in" id="p-a" value="${esc(item.id)}" placeholder="pt-BR-Neural2-B"></label>
+      <label class="f"><span class="lbl">Label</span><input class="in" id="p-b" value="${esc(item.label)}" placeholder="Masculina · quente"></label>`,
+    moldura: `<label class="f"><span class="lbl">ID (slug)</span><input class="in" id="p-a" value="${esc(item.id)}" placeholder="ornate-gold"></label>
+      <label class="f"><span class="lbl">Label</span><input class="in" id="p-b" value="${esc(item.label)}" placeholder="Dourada ornamentada"></label>`,
+    quadro: `<label class="f"><span class="lbl">Grupo (projeto)</span><input class="in" id="p-g" value="${esc(item.grupo || '')}" placeholder="Pinturapai (Dia dos Pais)"></label>
       <label class="f"><span class="lbl">Nome</span><input class="in" id="p-a" value="${esc(item.nome)}"></label>
-      <label class="f"><span class="lbl">Texto</span><textarea class="in" id="p-b" rows="8">${esc(item.texto)}</textarea></label>`}
-    <button class="btn primary block" id="p-save">Salvar</button>`,
+      <label class="f"><span class="lbl">Prompt do quadro (img2img)</span><textarea class="in" id="p-b" rows="10">${esc(item.texto)}</textarea></label>`,
+    texto: `<label class="f"><span class="lbl">Nome</span><input class="in" id="p-a" value="${esc(item.nome)}"></label>
+      <label class="f"><span class="lbl">Texto</span><textarea class="in" id="p-b" rows="8">${esc(item.texto)}</textarea></label>`,
+  };
+  drawer(`<h2>${idx >= 0 ? 'Editar' : 'Novo'} — ${tipo}</h2>${forms[kind]}<button class="btn primary block" id="p-save">Salvar</button>`,
     (dr) => {
       $('#p-save', dr).onclick = async () => {
         const a = $('#p-a', dr).value.trim(), b = $('#p-b', dr).value.trim();
-        if (!a || !b) return toast('preencha os dois campos', true);
-        const novo = isVoz ? { id: a, label: b, genero: item.genero || 'M' } : { id: item.id || ('p_' + Date.now().toString(36)), nome: a, texto: b };
+        if (!a || !b) return toast('preencha os campos', true);
+        let novo;
+        if (kind === 'voz') novo = { id: a, label: b, genero: item.genero || 'M' };
+        else if (kind === 'moldura') novo = { id: a, label: b };
+        else if (kind === 'quadro') novo = { id: item.id || ('qd_' + Date.now().toString(36)), grupo: ($('#p-g', dr).value.trim() || 'Outros'), nome: a, texto: b };
+        else novo = { id: item.id || ('p_' + Date.now().toString(36)), nome: a, texto: b };
         if (idx >= 0) S.presets[tipo][idx] = novo; else S.presets[tipo].push(novo);
         try {
           await api('save_presets', { body: { tipo, items: S.presets[tipo] } });
