@@ -419,7 +419,7 @@ function vFila() {
         <div class="row" style="margin-top:10px">
           ${j.status === 'done' && j.video ? `<a class="btn sm primary grow" href="${esc(j.video)}" target="_blank">${I.play} Ver vídeo</a>` : ''}
           ${j.status === 'error' ? `<button class="btn sm grow act" data-op="retry">Tentar de novo</button>` : ''}
-          ${['queued', 'claimed'].includes(j.status) ? `<button class="btn sm grow act" data-op="cancel">Cancelar</button>` : ''}
+          ${['queued', 'claimed', 'running'].includes(j.status) ? `<button class="btn sm grow act" data-op="cancel">Cancelar</button>` : ''}
           <button class="btn sm danger act" data-op="delete">${I.trash}</button>
         </div>
       </div>`;

@@ -230,7 +230,7 @@ switch ($action) {
     $outJob = null;
     foreach ($jobs as $i => $j) {
       if (($j['id'] ?? '') !== $id) continue;
-      if ($op === 'cancel' && in_array($j['status'], ['queued', 'claimed'], true)) {
+      if ($op === 'cancel' && in_array($j['status'], ['queued', 'claimed', 'running'], true)) {
         $jobs[$i]['status'] = 'error'; $jobs[$i]['error'] = 'cancelado'; $jobs[$i]['stage'] = 'cancelado';
       } elseif ($op === 'retry' && $j['status'] === 'error') {
         $jobs[$i]['status'] = 'queued'; $jobs[$i]['error'] = null; $jobs[$i]['pct'] = 0; $jobs[$i]['stage'] = 'na fila'; $jobs[$i]['log'] = [];
