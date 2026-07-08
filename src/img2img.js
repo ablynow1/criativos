@@ -1,9 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { config, requireProjectId } from './config.js';
+import { imageModelUrl } from './config.js';
 import { getAccessToken } from './googleAuth.js';
-
-const IMAGE_MODEL = process.env.IMAGE_MODEL || 'gemini-2.5-flash-image';
 
 function mimeOf(p) {
   const e = path.extname(p).toLowerCase();
@@ -13,14 +11,13 @@ function mimeOf(p) {
 }
 
 /**
- * Image-to-image via Nano Banana (gemini-2.5-flash-image) na Vertex AI.
+ * Image-to-image via Nano Banana Pro (gemini-3-pro-image-preview) na Vertex AI.
  * Passa uma ou mais imagens de referência + um prompt de texto; devolve o PNG gerado.
  * Usado pra "foto -> óleo" (retrato do produto) e pra compor cena a partir da arte.
  */
 export async function img2img({ inputPaths, prompt, outputPath, aspectRatio = '3:4' }) {
   const accessToken = await getAccessToken();
-  const project = requireProjectId();
-  const url = `https://${config.googleCloudLocation}-aiplatform.googleapis.com/v1/projects/${project}/locations/${config.googleCloudLocation}/publishers/google/models/${IMAGE_MODEL}:generateContent`;
+  const url = imageModelUrl();
 
   const paths = Array.isArray(inputPaths) ? inputPaths : [inputPaths];
   const imageParts = [];
@@ -42,7 +39,7 @@ export async function img2img({ inputPaths, prompt, outputPath, aspectRatio = '3
   });
 
   if (!res.ok) {
-    throw new Error(`img2img (${IMAGE_MODEL}) ${res.status}: ${await res.text()}`);
+    throw new Error(`img2img ${res.status}: ${await res.text()}`);
   }
   const data = await res.json();
   const parts = data.candidates?.[0]?.content?.parts || [];

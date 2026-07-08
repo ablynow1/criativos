@@ -1,17 +1,14 @@
 import { writeFile } from 'node:fs/promises';
-import { config, requireProjectId } from './config.js';
+import { imageModelUrl } from './config.js';
 import { getAccessToken } from './googleAuth.js';
-
-const IMAGE_MODEL = process.env.IMAGE_MODEL || 'gemini-2.5-flash-image';
 
 /**
  * Gera uma imagem contextual do produto (retrato 9:16) via modelo de imagem
- * do Gemini na Vertex AI. Retorna o caminho do PNG salvo.
+ * do Gemini na Vertex AI (Nano Banana Pro por padrão). Retorna o caminho do PNG.
  */
 export async function generateProductImage({ prompt, outputPath }) {
   const accessToken = await getAccessToken();
-  const project = requireProjectId();
-  const url = `https://${config.googleCloudLocation}-aiplatform.googleapis.com/v1/projects/${project}/locations/${config.googleCloudLocation}/publishers/google/models/${IMAGE_MODEL}:generateContent`;
+  const url = imageModelUrl();
 
   const res = await fetch(url, {
     method: 'POST',
@@ -35,7 +32,7 @@ export async function generateProductImage({ prompt, outputPath }) {
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Geração de imagem (${IMAGE_MODEL}) ${res.status}: ${body}`);
+    throw new Error(`Geração de imagem ${res.status}: ${body}`);
   }
 
   const data = await res.json();
