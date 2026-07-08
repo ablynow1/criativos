@@ -57,6 +57,7 @@ async function main() {
     narracao: cfg.narracao,
     voz: cfg.voz,
     estiloLegenda: cfg.estiloLegenda || 'contorno',
+    direcaoVoz: cfg.direcaoVoz,
     audio: cfg.audio || {},
     cenas: cfg.cenas.map((c) => ({ imagem: scenePath, prompt: c.prompt, duracaoSegundos: c.duracao || 8 })),
   };

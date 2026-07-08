@@ -30,7 +30,7 @@ export async function runPipeline(project, { tmpDir, outputPath }) {
 
   console.log(`[1/4] Gerando narração (TTS) + timestamps...`);
   const narrationAudioPath = path.join(tmpDir, 'narracao.mp3');
-  const { wordTimings } = await generateNarration({ text: narracao, outputAudioPath: narrationAudioPath, voiceName: voz });
+  const { wordTimings } = await generateNarration({ text: narracao, outputAudioPath: narrationAudioPath, voiceName: voz, direcao: project.direcaoVoz });
   const narrationDuration = await getDurationSeconds(narrationAudioPath);
   console.log(`   narração: ${narrationDuration.toFixed(1)}s`);
 

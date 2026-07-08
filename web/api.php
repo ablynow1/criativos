@@ -116,14 +116,22 @@ function seed_presets(): array {
       ]],
     ],
     'vozes' => [
-      ['id' => 'pt-BR-Neural2-B', 'label' => 'Masculina · quente (Neural2-B)', 'genero' => 'M'],
-      ['id' => 'pt-BR-Wavenet-B', 'label' => 'Masculina · firme (Wavenet-B)', 'genero' => 'M'],
-      ['id' => 'pt-BR-Wavenet-E', 'label' => 'Masculina · grave (Wavenet-E)', 'genero' => 'M'],
-      ['id' => 'pt-BR-Neural2-A', 'label' => 'Feminina · suave (Neural2-A)', 'genero' => 'F'],
-      ['id' => 'pt-BR-Neural2-C', 'label' => 'Feminina · clara (Neural2-C)', 'genero' => 'F'],
-      ['id' => 'pt-BR-Wavenet-A', 'label' => 'Feminina · natural (Wavenet-A)', 'genero' => 'F'],
-      ['id' => 'pt-BR-Wavenet-C', 'label' => 'Feminina · madura (Wavenet-C)', 'genero' => 'F'],
-      ['id' => 'pt-BR-Wavenet-D', 'label' => 'Feminina · jovem (Wavenet-D)', 'genero' => 'F'],
+      ['id' => 'gemini-tts:Charon', 'label' => '★ Gemini · masculina DIRIGÍVEL (a mais humana)', 'genero' => 'M'],
+      ['id' => 'gemini-tts:Kore', 'label' => '★ Gemini · feminina DIRIGÍVEL (a mais humana)', 'genero' => 'F'],
+      ['id' => 'gemini-tts:Puck', 'label' => '★ Gemini · masculina jovem DIRIGÍVEL', 'genero' => 'M'],
+      ['id' => 'gemini-tts:Aoede', 'label' => '★ Gemini · feminina jovem DIRIGÍVEL', 'genero' => 'F'],
+      ['id' => 'pt-BR-Chirp3-HD-Charon', 'label' => 'Chirp HD · masculina profunda natural', 'genero' => 'M'],
+      ['id' => 'pt-BR-Chirp3-HD-Fenrir', 'label' => 'Chirp HD · masculina firme natural', 'genero' => 'M'],
+      ['id' => 'pt-BR-Chirp3-HD-Puck', 'label' => 'Chirp HD · masculina jovem natural', 'genero' => 'M'],
+      ['id' => 'pt-BR-Chirp3-HD-Orus', 'label' => 'Chirp HD · masculina calorosa', 'genero' => 'M'],
+      ['id' => 'pt-BR-Chirp3-HD-Kore', 'label' => 'Chirp HD · feminina clara natural', 'genero' => 'F'],
+      ['id' => 'pt-BR-Chirp3-HD-Aoede', 'label' => 'Chirp HD · feminina jovem natural', 'genero' => 'F'],
+      ['id' => 'pt-BR-Chirp3-HD-Leda', 'label' => 'Chirp HD · feminina suave natural', 'genero' => 'F'],
+      ['id' => 'pt-BR-Chirp3-HD-Zephyr', 'label' => 'Chirp HD · feminina expressiva', 'genero' => 'F'],
+      ['id' => 'pt-BR-Neural2-B', 'label' => 'Clássica · masculina (Neural2-B)', 'genero' => 'M'],
+      ['id' => 'pt-BR-Neural2-A', 'label' => 'Clássica · feminina (Neural2-A)', 'genero' => 'F'],
+      ['id' => 'pt-BR-Neural2-C', 'label' => 'Clássica · feminina (Neural2-C)', 'genero' => 'F'],
+      ['id' => 'pt-BR-Wavenet-B', 'label' => 'Clássica · masculina (Wavenet-B)', 'genero' => 'M'],
     ],
   ];
 }
@@ -135,11 +143,16 @@ if ($presets === null) {
   $presets = seed_presets(); jwrite('presets.json', $presets);
 } else {
   // backfill de chaves novas (ex.: quadros/molduras) sem apagar o que o usuário editou
-  $seed = null;
+  $seed = null; $dirty = false;
   foreach (['quadros', 'molduras', 'estilos', 'templates', 'ganchos', 'vozes', 'arquetipos'] as $k) {
-    if (!isset($presets[$k])) { $seed = $seed ?? seed_presets(); $presets[$k] = $seed[$k] ?? []; }
+    if (!isset($presets[$k])) { $seed = $seed ?? seed_presets(); $presets[$k] = $seed[$k] ?? []; $dirty = true; }
   }
-  if ($seed !== null) jwrite('presets.json', $presets);
+  // merge de vozes novas do seed (por id) — vozes de gerações novas aparecem sem apagar as do usuário
+  $seed = $seed ?? seed_presets();
+  $haveIds = array_column($presets['vozes'] ?? [], 'id');
+  $newVoices = array_values(array_filter($seed['vozes'], fn($v) => !in_array($v['id'], $haveIds, true)));
+  if ($newVoices) { $presets['vozes'] = array_merge($newVoices, $presets['vozes'] ?? []); $dirty = true; }
+  if ($dirty) jwrite('presets.json', $presets);
 }
 
 // ---------- auth ----------

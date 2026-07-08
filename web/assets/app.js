@@ -134,7 +134,8 @@ function novoCriativo() {
   return {
     id: null, nome: '', modo: 'manual', lp_url: '',
     ref_foto: '', quadro_prompt_id: '', quadro_prompt: '', moldura: 'ornate-gold', cenario: '',
-    narracao: '', voz: d.voz || 'pt-BR-Neural2-B', estiloLegenda: d.estiloLegenda || 'contorno',
+    narracao: '', voz: d.voz || 'gemini-tts:Charon', estiloLegenda: d.estiloLegenda || 'contorno',
+    direcao_voz: '',
     audio: { ambiente: true, musica: 'emocional' },
     cenas: [{ imagem: '', prompt: '', duracao: durCena() }], notas: '',
   };
@@ -333,6 +334,10 @@ function renderEditor() {
       <h3>Voz & legenda</h3>
       <label class="f"><span class="lbl">Voz do narrador</span>
         <select class="in" id="f-voz">${vozes.map(v => `<option value="${esc(v.id)}" ${v.id === c.voz ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
+      ${(c.voz || '').startsWith('gemini-tts:') ? `
+      <label class="f"><span class="lbl">Direção da voz (atuação)</span>
+        <textarea class="in" id="f-direcao" rows="2" placeholder="ex: fale como um filho emocionado contando pro amigo, ritmo natural, quase se emocionando no final">${esc(c.direcao_voz || '')}</textarea></label>
+      <div class="hint" style="margin-top:-6px;margin-bottom:10px">Vozes ★ Gemini aceitam direção de cena — descreva COMO falar (emoção, ritmo, personagem). É o que mata o tom robótico.</div>` : ''}
       <span class="lbl" style="display:block;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600">Estilo da legenda</span>
       <div class="chips">
         <button class="chip ${c.estiloLegenda === 'contorno' ? 'on' : ''}" data-leg="contorno">Contorno (Hormozi)</button>
@@ -385,7 +390,9 @@ function bEditor() {
   const c = S.editing;
   $('#back').onclick = () => { S.editing = null; render(); };
   $('#f-nome').oninput = (e) => c.nome = e.target.value;
-  $('#f-voz').onchange = (e) => c.voz = e.target.value;
+  $('#f-voz').onchange = (e) => { c.voz = e.target.value; renderEditor(); };
+  const dirEl = $('#f-direcao');
+  if (dirEl) dirEl.oninput = (e) => c.direcao_voz = e.target.value;
   $('#f-notas').oninput = (e) => c.notas = e.target.value;
   $$('[data-modo]').forEach(b => b.onclick = () => { c.modo = b.dataset.modo; renderEditor(); });
   $$('[data-leg]').forEach(b => b.onclick = () => { c.estiloLegenda = b.dataset.leg; renderEditor(); });
