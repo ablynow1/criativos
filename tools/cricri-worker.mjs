@@ -79,6 +79,7 @@ function runPipeline(args, onLine) {
 function stageFromLine(l, nCenas) {
   if (l.includes('[1/4]')) return [8, 'gerando narração (TTS)'];
   if (l.includes('[2/4]')) return [15, 'gerando clipes no Veo'];
+  if (l.includes('Ken Burns')) return [null, 'Veo bloqueou uma cena — usando movimento Ken Burns'];
   const m = l.match(/cena (\d+)\/(\d+)/);
   if (m) { const [_, x, n] = m.map(Number); return [15 + Math.round(55 * (x / (n || nCenas || 1))), `Veo: cena ${x}/${n}`]; }
   if (l.includes('[3/4]')) return [78, 'sincronizando legendas'];

@@ -91,14 +91,15 @@ export async function generateVideoClip({
     throw new Error(`Veo generation falhou: ${JSON.stringify(operation.error)}`);
   }
 
-  // Filtro de segurança (RAI) do Veo bloqueou a geração — dá mensagem clara e acionável.
+  // Filtro de segurança (RAI) do Veo bloqueou a geração — erro com código pro fallback.
   if (operation.response?.raiMediaFilteredCount > 0) {
     const motivo = (operation.response.raiMediaFilteredReasons || []).join(' ');
-    throw new Error(
+    const err = new Error(
       `Veo BLOQUEOU o vídeo pelo filtro de conteúdo do Google (política de segurança). ` +
-      `Causa comum: imagem com CRIANÇA/menor, ou rosto/cena sensível — o Veo não anima esses casos. ` +
-      `Não foi cobrado. Troque a imagem de referência (ex: só adulto) ou ajuste o prompt da cena. [${motivo.slice(0, 200)}]`
+      `Causa comum: imagem com CRIANÇA/menor, ou rosto/cena sensível. Não foi cobrado. [${motivo.slice(0, 200)}]`
     );
+    err.code = 'VEO_RAI_BLOCKED';
+    throw err;
   }
 
   const prediction = operation.response?.predictions?.[0] || operation.response?.videos?.[0];

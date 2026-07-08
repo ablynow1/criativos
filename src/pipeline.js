@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { generateVideoClip } from './generateVideoClip.js';
+import { kenBurns } from './kenBurns.js';
 import { generateNarration } from './generateNarration.js';
 import { generateSubtitles } from './generateSubtitles.js';
 import { mergeFinal } from './mergeFinal.js';
@@ -39,15 +40,26 @@ export async function runPipeline(project, { tmpDir, outputPath }) {
   for (let i = 0; i < cenas.length; i += 1) {
     const cena = cenas[i];
     const clipPath = path.join(tmpDir, `clip-${i}.mp4`);
+    const dur = cena.duracaoSegundos || 8;
     console.log(`   cena ${i + 1}/${cenas.length}: ${cena.imagem}`);
-    await generateVideoClip({
-      imagePath: cena.imagem,
-      prompt: cena.prompt,
-      outputPath: clipPath,
-      aspectRatio: '9:16',
-      resolution: '1080p',
-      durationSeconds: cena.duracaoSegundos || 8,
-    });
+    try {
+      await generateVideoClip({
+        imagePath: cena.imagem,
+        prompt: cena.prompt,
+        outputPath: clipPath,
+        aspectRatio: '9:16',
+        resolution: '1080p',
+        durationSeconds: dur,
+      });
+    } catch (err) {
+      if (err.code === 'VEO_RAI_BLOCKED') {
+        // Veo bloqueou (ex: criança) — não falha o job, cai pro movimento Ken Burns.
+        console.warn(`   ⚠️  Veo bloqueou a cena ${i + 1} (filtro de conteúdo) — usando movimento Ken Burns na imagem.`);
+        await kenBurns({ imagePath: cena.imagem, outputPath: clipPath, durationSeconds: dur, index: i });
+      } else {
+        throw err;
+      }
+    }
     clipPaths.push(clipPath);
   }
 
