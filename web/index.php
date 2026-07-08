@@ -10,13 +10,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css?v=1">
+<link rel="stylesheet" href="assets/style.css?v=2">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦗</text></svg>">
 </head>
 <body>
 <div id="app" aria-live="polite">
-  <div class="boot"><div class="boot-mark">Cricri</div><div class="boot-sub">carregando…</div></div>
+  <div class="boot"><div class="boot-mark">Cricri</div><div class="boot-sk"><i></i><i></i><i></i></div></div>
 </div>
-<script src="assets/app.js?v=1"></script>
+<script src="assets/app.js?v=2"></script>
 </body>
 </html>

@@ -48,6 +48,7 @@ async function main() {
     outDir: tmpDir,
     moldura: cfg.moldura || 'ornate-gold',
     cenario: cfg.cenario || 'a warm, cozy living room with soft natural window light',
+    tipoProduto: cfg.tipoProduto || 'quadro',
   });
   console.log(`   arte: ${artworkPath}`);
   console.log(`   cena: ${scenePath}`);

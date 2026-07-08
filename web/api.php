@@ -147,11 +147,16 @@ if ($presets === null) {
   foreach (['quadros', 'molduras', 'estilos', 'templates', 'ganchos', 'vozes', 'arquetipos'] as $k) {
     if (!isset($presets[$k])) { $seed = $seed ?? seed_presets(); $presets[$k] = $seed[$k] ?? []; $dirty = true; }
   }
-  // merge de vozes novas do seed (por id) — vozes de gerações novas aparecem sem apagar as do usuário
+  // merge por id de itens novos do seed (vozes e quadros) — aparecem sem apagar edições do usuário
   $seed = $seed ?? seed_presets();
-  $haveIds = array_column($presets['vozes'] ?? [], 'id');
-  $newVoices = array_values(array_filter($seed['vozes'], fn($v) => !in_array($v['id'], $haveIds, true)));
-  if ($newVoices) { $presets['vozes'] = array_merge($newVoices, $presets['vozes'] ?? []); $dirty = true; }
+  foreach (['vozes' => 'prepend', 'quadros' => 'append'] as $k => $mode) {
+    $haveIds = array_column($presets[$k] ?? [], 'id');
+    $novos = array_values(array_filter($seed[$k] ?? [], fn($v) => !in_array($v['id'], $haveIds, true)));
+    if ($novos) {
+      $presets[$k] = $mode === 'prepend' ? array_merge($novos, $presets[$k] ?? []) : array_merge($presets[$k] ?? [], $novos);
+      $dirty = true;
+    }
+  }
   if ($dirty) jwrite('presets.json', $presets);
 }
 

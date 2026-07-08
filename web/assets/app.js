@@ -51,23 +51,53 @@ function closeDrawer() {
   if (dr) { dr.classList.remove('on'); setTimeout(() => dr.remove(), 300); }
 }
 
-// ---------- ícones ----------
+// ---------- ícones (stroke 1.6, terminações redondas — linguagem única) ----------
+const svg = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 const I = {
-  studio: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
-  queue: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="4" rx="1.5"/><rect x="3" y="10" width="18" height="4" rx="1.5"/><rect x="3" y="16" width="12" height="4" rx="1.5"/></svg>',
-  gallery: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="9" cy="8" r="1.6"/></svg>',
-  lib: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5Z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>',
-  gear: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg>',
-  plus: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
-  play: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/></svg>',
-  trash: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>',
-  copy: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
-  down: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3v12m0 0 5-5m-5 5-5-5"/><path d="M4 21h16"/></svg>',
-  up: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>',
-  dn: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
-  back: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>',
-  dup: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/></svg>',
+  studio: svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
+  queue: svg('<path d="m12 2 9 4.9-9 4.9-9-4.9L12 2Z"/><path d="m3 11.9 9 4.9 9-4.9"/><path d="m3 16.9 9 4.9 9-4.9"/>'),
+  gallery: svg('<rect x="3" y="3" width="18" height="18" rx="4"/><path d="m3 15.5 4.5-4.5 3.5 3.5 4-4L21 16.5"/><circle cx="9" cy="8.5" r="1.4"/>'),
+  lib: svg('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5Z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 7h6"/>'),
+  gear: svg('<circle cx="12" cy="12" r="3.1"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09c0 .68.4 1.3 1.03 1.56a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01c.26.62.88 1.03 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03Z"/>'),
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  play: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5.4a1 1 0 0 1 1.52-.86l10.2 6.17a1 1 0 0 1 0 1.72L9.52 18.6A1 1 0 0 1 8 17.74V5.4Z"/></svg>',
+  trash: svg('<path d="M3.5 6.5h17"/><path d="M8.5 6.5v-2a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5v2"/><path d="M18.5 6.5 18 19a2 2 0 0 1-2 1.9H8A2 2 0 0 1 6 19l-.5-12.5"/><path d="M10 10.8v5.4M14 10.8v5.4"/>'),
+  copy: svg('<rect x="9" y="9" width="12" height="12" rx="3"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
+  down: svg('<path d="M12 3.5v11.5m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M4.5 20.5h15"/>'),
+  up: svg('<path d="m18 15-6-6-6 6"/>'),
+  dn: svg('<path d="m6 9 6 6 6-6"/>'),
+  back: svg('<path d="m15 18-6-6 6-6"/>'),
+  dup: svg('<rect x="8" y="8" width="13" height="13" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/>'),
+  spark: svg('<path d="M12 2.5 13.8 8l5.7.2-4.5 3.6 1.6 5.7L12 14.2l-4.6 3.3 1.6-5.7L4.5 8.2 10.2 8 12 2.5Z"/>'),
+  x: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
 };
+
+// ---------- reveal on scroll ----------
+let revealIO = null;
+function initReveal() {
+  if (!('IntersectionObserver' in window)) return;
+  if (revealIO) revealIO.disconnect();
+  revealIO = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); }
+  }, { rootMargin: '0px 0px -8% 0px' });
+  $$('#main .card, #main .item, #main .gitem, #main .job, #main .acc').forEach((el, i) => {
+    if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; // já visível: não esconde
+    el.classList.add('reveal');
+    revealIO.observe(el);
+  });
+}
+
+// ---------- lightbox de vídeo ----------
+function lightbox(src) {
+  const lb = document.createElement('div');
+  lb.className = 'lightbox';
+  lb.innerHTML = `<button class="lbx" aria-label="fechar">${I.x}</button><video src="${esc(src)}" controls autoplay playsinline></video>`;
+  document.body.appendChild(lb);
+  requestAnimationFrame(() => lb.classList.add('on'));
+  const close = () => { lb.classList.remove('on'); setTimeout(() => lb.remove(), 300); };
+  lb.onclick = (e) => { if (e.target === lb) close(); };
+  $('.lbx', lb).onclick = close;
+}
 
 // ---------- helpers de domínio ----------
 function wps() { return (S.config?.defaults?.wps) || 2.7; }
@@ -167,28 +197,36 @@ function renderLogin(msg = '') {
 }
 
 function shell(content) {
-  const activeJobs = S.jobs.filter(j => ['queued', 'claimed', 'running'].includes(j.status)).length;
+  const running = S.jobs.filter(j => j.status === 'running').length;
+  const queued = S.jobs.filter(j => ['queued', 'claimed'].includes(j.status)).length;
+  const activeJobs = running + queued;
+  const statusPill = running
+    ? `<span class="status-pill"><span class="dot"></span>renderizando</span>`
+    : queued ? `<span class="status-pill" style="color:var(--gold2);background:rgba(201,162,92,.1);border-color:rgba(201,162,92,.25)"><span class="dot"></span>${queued} na fila</span>` : '';
+  const animate = S._lastView !== (S.editing ? 'editor' : S.tab);
+  S._lastView = S.editing ? 'editor' : S.tab;
   $('#app').innerHTML = `
     <header class="top">
       <div class="brand">Cricri <small>criativos</small></div>
-      <div class="right"><span class="hint">${activeJobs ? activeJobs + ' na fila' : ''}</span></div>
+      <div class="right">${statusPill}</div>
     </header>
-    <main id="main">${content}</main>
+    <main id="main"><div class="view${animate ? ' anim' : ''}">${content}</div></main>
     <nav class="nav">
       ${[['estudio', 'Estúdio', I.studio], ['fila', 'Fila', I.queue], ['galeria', 'Galeria', I.gallery], ['biblioteca', 'Biblioteca', I.lib], ['ajustes', 'Ajustes', I.gear]]
-        .map(([k, l, ic]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''} ${k === 'fila' && activeJobs ? 'badge' : ''}">${ic}<span class="dot"></span>${l}</button>`).join('')}
+        .map(([k, l, ic]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''} ${k === 'fila' && activeJobs ? 'badge' : ''}" aria-label="${l}">${ic}<span class="dot"></span>${l}</button>`).join('')}
     </nav>`;
   $$('.nav button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; S.editing = null; render(); });
 }
 
 function render() {
   if (!S.auth) return renderLogin();
-  if (S.editing) return renderEditor();
+  if (S.editing) { renderEditor(); initReveal(); return; }
   const views = { estudio: vEstudio, fila: vFila, galeria: vGaleria, biblioteca: vBiblioteca, ajustes: vAjustes };
   shell(views[S.tab]());
   const binds = { estudio: bEstudio, fila: bFila, galeria: bGaleria, biblioteca: bBiblioteca, ajustes: bAjustes };
   binds[S.tab]();
   managePoll();
+  initReveal();
 }
 
 // ============ ESTÚDIO (lista) ============
@@ -262,8 +300,8 @@ function renderEditor() {
         <button class="btn block" id="pick-quadro" style="justify-content:space-between">
           <span>${estiloNome ? esc(estiloNome) : 'Escolher estilo…'}</span><span style="color:var(--dim)">▾</span>
         </button></label>
-      <label class="f"><span class="lbl">Moldura</span>
-        <select class="in" id="f-moldura">${molduras.map(m => `<option value="${esc(m.id)}" ${m.id === (c.moldura || 'ornate-gold') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></label>
+      ${c.quadro_tipo === 'boneco' ? '' : `<label class="f"><span class="lbl">Moldura</span>
+        <select class="in" id="f-moldura">${molduras.map(m => `<option value="${esc(m.id)}" ${m.id === (c.moldura || 'ornate-gold') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></label>`}
       <label class="f"><span class="lbl">Cenário (opcional)</span>
         <input class="in" id="f-cenario" value="${esc(c.cenario || '')}" placeholder="ex: a warm cozy living room (deixe vazio pro padrão)"></label>
     </div>`;
@@ -287,7 +325,7 @@ function renderEditor() {
     <div class="card">
       <h3>Cenas — movimento do vídeo (${c.cenas.length})</h3>
       ${modo === 'quadro' ? '<div class="hint" style="margin-bottom:10px">No modo quadro, todas as cenas animam a MESMA imagem gerada (o avatar segurando o quadro). Aqui você só descreve o movimento de câmera de cada trecho.</div>' : ''}
-      <button class="btn block" id="arquetipo" style="margin-bottom:12px">⚡ Aplicar arquétipo de criativo…</button>
+      <button class="btn block" id="arquetipo" style="margin-bottom:12px">${I.spark} Aplicar arquétipo de criativo…</button>
       <div id="cenas">${c.cenas.map((cn, i) => sceneHTML(cn, i, c.cenas.length, modo !== 'quadro')).join('')}</div>
       <button class="btn block" id="addCena">${I.plus} Adicionar cena</button>
     </div>`;
@@ -405,9 +443,10 @@ function bEditor() {
   if (c.modo === 'quadro') {
     $('#ref-btn').onclick = () => pickImage(url => { c.ref_foto = url; renderEditor(); });
     $('#ref-box').onclick = () => pickImage(url => { c.ref_foto = url; renderEditor(); });
-    $('#f-moldura').onchange = (e) => c.moldura = e.target.value;
+    const mold = $('#f-moldura');
+    if (mold) mold.onchange = (e) => c.moldura = e.target.value;
     $('#f-cenario').oninput = (e) => c.cenario = e.target.value;
-    $('#pick-quadro').onclick = () => pickQuadro((q) => { c.quadro_prompt_id = q.id; c.quadro_prompt = q.texto; renderEditor(); });
+    $('#pick-quadro').onclick = () => pickQuadro((q) => { c.quadro_prompt_id = q.id; c.quadro_prompt = q.texto; c.quadro_tipo = q.tipo || 'quadro'; renderEditor(); });
   }
 
   if (c.modo === 'lp') {
@@ -561,7 +600,7 @@ function vFila() {
     <div class="sub">O worker no Mac puxa daqui, roda o pipeline (TTS → Veo → legenda) e sobe o vídeo pronto.</div>
     ${jobs.length ? jobs.map(j => {
       const pillClass = { queued: 'q', claimed: 'q', running: 'r', done: 'd', error: 'e' }[j.status] || 'n';
-      const pillTxt = { queued: 'na fila', claimed: 'pego', running: 'rodando', done: 'pronto', error: 'erro' }[j.status] || j.status;
+      const pillTxt = { queued: 'na fila', claimed: 'pego', running: `${j.pct || 0}%`, done: 'pronto', error: 'erro' }[j.status] || j.status;
       return `<div class="job" data-id="${j.id}">
         <div class="head"><div class="t">${esc(j.nome)}</div><span class="pill ${pillClass}">${pillTxt}</span></div>
         ${['running', 'claimed'].includes(j.status) ? `<div class="bar"><i style="width:${j.pct || 2}%"></i></div>` : ''}
@@ -596,7 +635,10 @@ function vGaleria() {
     <div class="sub">Criativos prontos — 1080×1920, é baixar e subir no Ads Manager.</div>
     ${done.length ? `<div class="gal">${done.map(j => `
       <div class="gitem">
-        <video src="${esc(j.video)}" controls preload="metadata" playsinline></video>
+        <div class="vwrap" data-src="${esc(j.video)}">
+          <video src="${esc(j.video)}#t=0.5" preload="metadata" playsinline muted></video>
+          <div class="playov"><span class="pbtn">${I.play}</span></div>
+        </div>
         <div class="meta">
           <div class="t">${esc(j.nome)}</div>
           <div class="s">${new Date(j.updated_at).toLocaleDateString('pt-BR')}</div>
@@ -605,7 +647,9 @@ function vGaleria() {
       </div>`).join('')}</div>` :
     '<div class="empty"><div class="big">🎞️</div>Nada renderizado ainda.</div>'}`;
 }
-function bGaleria() {}
+function bGaleria() {
+  $$('.gitem .vwrap').forEach(w => w.onclick = () => lightbox(w.dataset.src));
+}
 
 // ============ BIBLIOTECA ============
 function vBiblioteca() {

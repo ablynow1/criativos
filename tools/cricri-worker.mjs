@@ -113,6 +113,7 @@ async function processJob(job) {
     const cfg = {
       refFoto: refLocal,
       quadroPrompt: snap.quadro_prompt,
+      tipoProduto: snap.quadro_tipo || 'quadro',
       moldura: snap.moldura || 'ornate-gold',
       cenario: snap.cenario || undefined,
       narracao: snap.narracao,
