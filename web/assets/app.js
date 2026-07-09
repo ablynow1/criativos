@@ -795,6 +795,12 @@ function vAjustes() {
       <button class="btn block" id="s-tokenbtn">Salvar token</button>
     </div>
 
+    <div class="card">
+      <h3>Log de erros</h3>
+      <div class="hint" style="margin-bottom:10px">Todo erro do sistema — Veo, TTS, geração de imagem, worker, o próprio site — ganha um número aqui. Se um job falhar, o erro na Fila já vem com "Erro #N"; consulte o detalhe (stack, contexto) tocando abaixo.</div>
+      <button class="btn block" id="s-errors">Ver últimos erros</button>
+    </div>
+
     <button class="btn danger block" id="s-logout">Sair</button>`;
 }
 function bAjustes() {
@@ -820,7 +826,36 @@ function bAjustes() {
     } catch (e) { toast(e.message, true); }
   };
   $('#s-logout').onclick = async () => { await api('logout', { body: {} }); S.auth = false; renderLogin(); };
+  $('#s-errors').onclick = verErros;
 }
+
+async function verErros() {
+  drawer(`<h2>Log de erros</h2><div id="err-list" class="hint">carregando…</div>`, async (dr) => {
+    try {
+      const r = await api('errors');
+      const list = $('#err-list', dr);
+      if (!r.errors.length) { list.textContent = 'nenhum erro registrado ainda 🎉'; return; }
+      list.className = '';
+      list.innerHTML = r.errors.map(e => `
+        <div class="preset">
+          <div class="t">#${esc(e.id)} · ${new Date(e.ts).toLocaleString('pt-BR')}</div>
+          <div class="hint" style="margin-bottom:6px">${esc(e.source)}</div>
+          <div class="x">${esc(e.message)}</div>
+          ${e.context && Object.keys(e.context).length ? `<details style="margin-top:8px"><summary class="hint" style="cursor:pointer">contexto</summary><div class="log">${esc(JSON.stringify(e.context, null, 2))}</div></details>` : ''}
+          ${e.stack ? `<details style="margin-top:8px"><summary class="hint" style="cursor:pointer">stack trace</summary><div class="log">${esc(e.stack)}</div></details>` : ''}
+        </div>`).join('');
+    } catch (err) { $('#err-list', dr).textContent = 'erro ao carregar: ' + err.message; }
+  });
+}
+
+// captura QUALQUER erro do próprio site (JS) e manda pro mesmo log numerado
+window.addEventListener('error', (e) => {
+  api('log_client_error', { body: { source: 'window.onerror', message: e.message, stack: e.error?.stack, url: location.href } }).catch(() => {});
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const reason = e.reason;
+  api('log_client_error', { body: { source: 'unhandledrejection', message: String(reason?.message || reason), stack: reason?.stack, url: location.href } }).catch(() => {});
+});
 
 // ---------- polling da fila ----------
 function managePoll() {

@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { logError } from '../src/errorLog.js';
 
 const BASE = process.env.CRICRI_URL || 'https://lventerprise.com.br/criativos';
 const TOKEN = process.env.CRICRI_TOKEN || '';
@@ -171,17 +172,33 @@ async function loop() {
         try {
           await processJob(job);
         } catch (err) {
-          log(`❌ job ${job.id} falhou:`, err.message);
           await flushProgress(); // espera todo progresso em voo antes de marcar erro
-          await call('worker_error', { body: { job_id: job.id, message: err.message } }).catch(() => {});
+          const id = await logError({
+            source: 'worker:processJob', error: err,
+            context: { job_id: job.id, nome: job.nome, modo: job.snapshot?.modo },
+          });
+          const msg = `Erro #${id} — ${err.message}`;
+          log(`❌ job ${job.id} falhou (#${id}):`, err.message);
+          await call('worker_error', { body: { job_id: job.id, message: msg } }).catch(() => {});
         }
         continue; // sem sleep: pega o próximo da fila direto
       }
     } catch (err) {
-      log('⚠️ poll falhou:', err.message);
+      const id = await logError({ source: 'worker:poll', error: err }).catch(() => null);
+      log(`⚠️ poll falhou${id ? ' (#' + id + ')' : ''}:`, err.message);
     }
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }
+
+process.on('unhandledRejection', async (err) => {
+  const e = err instanceof Error ? err : new Error(String(err));
+  const id = await logError({ source: 'worker:unhandledRejection', error: e }).catch(() => null);
+  log(`💥 promessa rejeitada sem tratamento${id ? ' (#' + id + ')' : ''}:`, e.message);
+});
+process.on('uncaughtException', async (err) => {
+  const id = await logError({ source: 'worker:uncaughtException', error: err }).catch(() => null);
+  log(`💥 exceção não capturada${id ? ' (#' + id + ')' : ''}:`, err.message);
+});
 
 loop();

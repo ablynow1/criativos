@@ -4,6 +4,7 @@ import { scrapeLandingPage } from './scrapeLandingPage.js';
 import { analyzeCopy } from './analyzeCopy.js';
 import { generateProductImage } from './generateProductImage.js';
 import { runPipeline } from './pipeline.js';
+import { logError } from './errorLog.js';
 
 function parseArgs(argv) {
   const args = {};
@@ -85,7 +86,8 @@ async function main() {
   await runPipeline(project, { tmpDir, outputPath });
 }
 
-main().catch((err) => {
-  console.error('Erro:', err.message);
+main().catch(async (err) => {
+  const id = await logError({ source: 'cli:fromLandingPage.js', error: err }).catch(() => null);
+  console.error(`Erro${id ? ' #' + id : ''}:`, err.message);
   process.exit(1);
 });

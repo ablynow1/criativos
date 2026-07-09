@@ -2,6 +2,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { generateQuadro } from './generateQuadro.js';
 import { runPipeline } from './pipeline.js';
+import { logError } from './errorLog.js';
 
 /**
  * Modo "Quadro": foto de referência + prompt de quadro escolhido → arte pintada →
@@ -65,7 +66,8 @@ async function main() {
   await runPipeline(project, { tmpDir, outputPath });
 }
 
-main().catch((err) => {
-  console.error('Erro:', err.message);
+main().catch(async (err) => {
+  const id = await logError({ source: 'cli:fromQuadro.js', error: err }).catch(() => null);
+  console.error(`Erro${id ? ' #' + id : ''}:`, err.message);
   process.exit(1);
 });

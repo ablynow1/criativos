@@ -56,6 +56,56 @@ if (!file_exists(DATA . '/.htaccess')) {
   file_put_contents(DATA . '/.htaccess', "Require all denied\n");
 }
 
+// ---------- log de erros — TODO erro do sistema ganha um número aqui ----------
+// Fonte única: pipeline/worker (Mac, via worker_log_error), o próprio PHP
+// (exceções/erros não tratados, capturados abaixo) e o navegador (via
+// log_client_error). Guardado em data/errors.json, protegido pelo .htaccess
+// acima. Consulta: Ajustes > Log de erros no site, ou tools/error-log.mjs.
+function next_error_id(): int {
+  $seq = (int) jread('errors_seq.json', 0);
+  $seq += 1;
+  jwrite('errors_seq.json', $seq);
+  return $seq;
+}
+function log_error_entry(string $source, string $message, ?string $stack = null, array $context = []): array {
+  $entry = [
+    'id' => next_error_id(),
+    'ts' => now(),
+    'source' => $source,
+    'message' => mb_substr($message, 0, 2000),
+    'stack' => $stack ? mb_substr($stack, 0, 4000) : null,
+    'context' => $context,
+  ];
+  $errors = jread('errors.json', []);
+  $errors[] = $entry;
+  if (count($errors) > 500) $errors = array_slice($errors, -500); // mantém só os últimos 500
+  jwrite('errors.json', $errors);
+  return $entry;
+}
+
+// Qualquer exceção ou erro PHP não tratado a partir daqui vira uma entrada no
+// log (com stack) em vez de sumir num 500 silencioso ou num warning solto.
+set_exception_handler(function (Throwable $e) {
+  try {
+    log_error_entry('php:uncaught', $e->getMessage(), $e->getTraceAsString(), [
+      'action' => $_GET['action'] ?? ($_POST['action'] ?? null),
+      'file' => $e->getFile(), 'line' => $e->getLine(),
+    ]);
+  } catch (Throwable $inner) { /* nunca deixa o próprio log derrubar a resposta */ }
+  http_response_code(500);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode(['ok' => false, 'error' => 'erro interno — registrado no log de erros']);
+  exit;
+});
+set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+  if (!(error_reporting() & $errno)) return false; // respeita @-supressão
+  if (in_array($errno, [E_NOTICE, E_USER_NOTICE, E_DEPRECATED, E_USER_DEPRECATED, E_STRICT], true)) {
+    log_error_entry('php:notice', $errstr, null, ['file' => $errfile, 'line' => $errline]);
+    return true; // só registra, não muda o comportamento normal do PHP
+  }
+  throw new ErrorException($errstr, 0, $errno, $errfile, $errline);
+});
+
 function seed_config(): array {
   return [
     'password_hash' => password_hash('cricri123', PASSWORD_DEFAULT),
@@ -168,6 +218,14 @@ function require_login(): void { if (!is_logged()) fail('não autenticado', 401)
 function require_worker(array $config): void {
   $tok = $_SERVER['HTTP_X_CRICRI_TOKEN'] ?? ($_GET['token'] ?? ($_POST['token'] ?? ''));
   if (!hash_equals($config['worker_token'], (string)$tok)) fail('token inválido', 401);
+}
+// pro log de erros: aceita a sessão do navegador (Vitor no site) OU o token
+// do worker (a ferramenta de consulta tools/error-log.mjs, rodando no Mac).
+function require_login_or_worker(array $config): void {
+  if (is_logged()) return;
+  $tok = $_SERVER['HTTP_X_CRICRI_TOKEN'] ?? ($_GET['token'] ?? '');
+  if (hash_equals($config['worker_token'], (string)$tok)) return;
+  fail('não autenticado', 401);
 }
 
 // CSRF leve: POSTs de sessão exigem o header custom
@@ -448,6 +506,47 @@ switch ($action) {
     }
     jwrite('jobs.json', $jobs);
     out(['ok' => true]);
+  }
+
+  // ===== log de erros =====
+  case 'worker_log_error': {
+    require_worker($config);
+    $b = body();
+    $entry = log_error_entry(
+      (string)($b['source'] ?? 'worker'),
+      (string)($b['message'] ?? 'erro desconhecido'),
+      isset($b['stack']) ? (string)$b['stack'] : null,
+      is_array($b['context'] ?? null) ? $b['context'] : []
+    );
+    out(['ok' => true, 'id' => $entry['id']]);
+  }
+
+  case 'log_client_error': {
+    require_login();
+    $b = body();
+    $entry = log_error_entry(
+      'browser:' . mb_substr((string)($b['source'] ?? 'app.js'), 0, 60),
+      (string)($b['message'] ?? 'erro desconhecido'),
+      isset($b['stack']) ? (string)$b['stack'] : null,
+      ['url' => $b['url'] ?? null, 'ua' => $_SERVER['HTTP_USER_AGENT'] ?? null]
+    );
+    out(['ok' => true, 'id' => $entry['id']]);
+  }
+
+  case 'errors': {
+    require_login_or_worker($config);
+    $errors = array_reverse(jread('errors.json', []));
+    $limit = max(1, min(200, (int)($_GET['limit'] ?? 60)));
+    out(['ok' => true, 'errors' => array_slice($errors, 0, $limit)]);
+  }
+
+  case 'error_get': {
+    require_login_or_worker($config);
+    $id = (int)($_GET['id'] ?? 0);
+    foreach (jread('errors.json', []) as $e) {
+      if ((int)($e['id'] ?? 0) === $id) out(['ok' => true, 'error' => $e]);
+    }
+    fail('erro #' . $id . ' não encontrado', 404);
   }
 
   default:
