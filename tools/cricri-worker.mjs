@@ -173,12 +173,23 @@ async function loop() {
           await processJob(job);
         } catch (err) {
           await flushProgress(); // espera todo progresso em voo antes de marcar erro
-          const id = await logError({
-            source: 'worker:processJob', error: err,
-            context: { job_id: job.id, nome: job.nome, modo: job.snapshot?.modo },
-          });
-          const msg = `Erro #${id} — ${err.message}`;
-          log(`❌ job ${job.id} falhou (#${id}):`, err.message);
+          // o processo filho (CLI) já loga e imprime "Erro #N: <msg>" antes de sair —
+          // se essa marca estiver no erro capturado aqui, reaproveita o número e a
+          // mensagem limpa em vez de logar tudo de novo (duplicava #N + #N+1 aninhados).
+          const already = err.message.match(/Erro #(L?\d+):\s*([\s\S]+)/);
+          let id, cleanMsg;
+          if (already) {
+            [, id, cleanMsg] = already;
+            cleanMsg = cleanMsg.trim();
+          } else {
+            id = await logError({
+              source: 'worker:processJob', error: err,
+              context: { job_id: job.id, nome: job.nome, modo: job.snapshot?.modo },
+            });
+            cleanMsg = err.message;
+          }
+          const msg = `Erro #${id} — ${cleanMsg}`;
+          log(`❌ job ${job.id} falhou (#${id}):`, cleanMsg);
           await call('worker_error', { body: { job_id: job.id, message: msg } }).catch(() => {});
         }
         continue; // sem sleep: pega o próximo da fila direto

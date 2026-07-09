@@ -90,7 +90,15 @@ export async function generateVideoClip({
   }
 
   if (operation.error) {
-    throw new Error(`Veo generation falhou: ${JSON.stringify(operation.error)}`);
+    // Bloqueio de CONTEÚDO na imagem de ENTRADA (ex: rosto/pessoa sensível — código 3
+    // "blocked by your current safety settings for person/face generation"). É recusa
+    // de política do Google, não erro de infra — mesmo tratamento do bloqueio de saída:
+    // cai pro Ken Burns em vez de derrubar o job. Erros de infra (rede, quota, auth)
+    // NÃO batem nesse padrão e continuam falhando o job normalmente (não mascarar bug real).
+    const isSafetyBlock = /safety|blocked|face generation|person generation/i.test(operation.error.message || '');
+    const err = new Error(`Veo generation falhou: ${JSON.stringify(operation.error)}`);
+    if (isSafetyBlock) err.code = 'VEO_RAI_BLOCKED';
+    throw err;
   }
 
   // Filtro de segurança (RAI) do Veo bloqueou a geração — erro com código pro fallback.
