@@ -291,7 +291,8 @@ switch ($action) {
       }
     }
     if ($modo === 'quadro') {
-      if (empty($c['ref_foto'])) fail('envie a foto de referência do avatar');
+      // ref_foto é OPCIONAL — sem ela, o worker inventa um personagem fictício
+      // pelo contexto (estilo + cenário + nome). Só o estilo é obrigatório.
       if (trim((string)($c['quadro_prompt'] ?? '')) === '') fail('escolha o estilo do quadro');
     }
     $list = jread('criativos.json', []);

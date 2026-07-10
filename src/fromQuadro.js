@@ -9,7 +9,9 @@ import { logError } from './errorLog.js';
  * cena do avatar segurando o quadro emoldurado → pipeline (TTS→Veo→legenda→merge).
  *
  * Uso: node src/fromQuadro.js --config inputs/x.json --out output/x.mp4
- * Config: { refFoto, quadroPrompt, moldura?, cenario?, narracao, voz?, estiloLegenda?, cenas:[{prompt,duracao?}] }
+ * Config: { refFoto?, quadroPrompt, quadroGrupo?, quadroNome?, nomeCreativo?, moldura?, cenario?, narracao, voz?, estiloLegenda?, cenas:[{prompt,duracao?}] }
+ * `refFoto` é OPCIONAL — sem ela, gera um personagem fictício a partir do
+ * contexto (estilo escolhido + cenário + nome do criativo).
  */
 function parseArgs(argv) {
   const args = {};
@@ -36,20 +38,24 @@ async function main() {
   const tmpDir = path.join('tmp', slug);
   await mkdir(tmpDir, { recursive: true });
 
-  if (!cfg.refFoto) throw new Error('falta refFoto (foto de referência do avatar)');
   if (!cfg.quadroPrompt) throw new Error('falta quadroPrompt (o prompt do quadro escolhido)');
   if (!cfg.narracao || !Array.isArray(cfg.cenas) || cfg.cenas.length === 0) {
     throw new Error('falta narracao e/ou cenas');
   }
 
-  console.log('[Q 1/2] Gerando a arte (foto → quadro) e a cena do avatar segurando o quadro...');
+  console.log(cfg.refFoto
+    ? '[Q 1/2] Gerando a arte (foto → quadro) e a cena do avatar segurando o quadro...'
+    : '[Q 1/2] Sem foto — inventando personagem fictício pelo contexto, depois a arte e a cena...');
   const { artworkPath, scenePath } = await generateQuadro({
-    refPhotoPath: cfg.refFoto,
+    refPhotoPath: cfg.refFoto || null,
     quadroPrompt: cfg.quadroPrompt,
     outDir: tmpDir,
     moldura: cfg.moldura || 'ornate-gold',
     cenario: cfg.cenario || 'a warm, cozy living room with soft natural window light',
     tipoProduto: cfg.tipoProduto || 'quadro',
+    quadroGrupo: cfg.quadroGrupo || '',
+    quadroNome: cfg.quadroNome || '',
+    nomeCreativo: cfg.nomeCreativo || '',
   });
   console.log(`   arte: ${artworkPath}`);
   console.log(`   cena: ${scenePath}`);

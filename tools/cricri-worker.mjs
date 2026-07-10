@@ -105,16 +105,32 @@ async function processJob(job) {
       '--estilo', snap.estiloLegenda || 'contorno', '--out', outPath];
     if (snap.audio?.musica && snap.audio.musica !== 'nenhuma') args.push('--musica', snap.audio.musica);
     if (snap.audio?.ambiente === false) args.push('--sem-ambiente');
+    // foto de referência é OPCIONAL — se tiver, o rosto real entra na imagem
+    // gerada; sem ela, segue 100% automático como sempre foi.
+    if (snap.ref_foto) {
+      await progress(job.id, 3, 'baixando foto de referência');
+      const ext = (snap.ref_foto.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      const refLocal = path.join(jobDir, `ref.${ext}`);
+      await download(snap.ref_foto, refLocal);
+      args.push('--ref-foto', refLocal);
+    }
   } else if (snap.modo === 'quadro') {
-    // baixa a foto de referência do avatar e monta o config do modo quadro
-    await progress(job.id, 3, 'baixando foto de referência');
-    const ext = (snap.ref_foto.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
-    const refLocal = path.join(jobDir, `ref.${ext}`);
-    await download(snap.ref_foto, refLocal);
+    // foto de referência é OPCIONAL — se tiver, baixa; se não, o fromQuadro.js
+    // inventa um personagem fictício a partir do contexto (grupo/cenário/nome).
+    let refLocal = null;
+    if (snap.ref_foto) {
+      await progress(job.id, 3, 'baixando foto de referência');
+      const ext = (snap.ref_foto.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      refLocal = path.join(jobDir, `ref.${ext}`);
+      await download(snap.ref_foto, refLocal);
+    }
     const cfg = {
       refFoto: refLocal,
       quadroPrompt: snap.quadro_prompt,
       tipoProduto: snap.quadro_tipo || 'quadro',
+      quadroGrupo: snap.quadro_grupo || '',
+      quadroNome: snap.quadro_nome || '',
+      nomeCreativo: snap.nome || '',
       moldura: snap.moldura || 'ornate-gold',
       cenario: snap.cenario || undefined,
       narracao: snap.narracao,

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { scrapeLandingPage } from './scrapeLandingPage.js';
 import { analyzeCopy } from './analyzeCopy.js';
 import { generateProductImage } from './generateProductImage.js';
+import { img2img } from './img2img.js';
 import { runPipeline } from './pipeline.js';
 import { logError } from './errorLog.js';
 
@@ -28,7 +29,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const url = args.url;
   if (!url) {
-    console.error('Uso: node src/fromLandingPage.js --url <URL da LP> [--out output/final.mp4] [--estilo contorno] [--briefing-only]');
+    console.error('Uso: node src/fromLandingPage.js --url <URL da LP> [--out output/final.mp4] [--estilo contorno] [--ref-foto caminho.png] [--briefing-only]');
     process.exit(1);
   }
 
@@ -57,9 +58,15 @@ async function main() {
   console.log(`   voz: ${briefing.voz}`);
   console.log(`   narração: "${briefing.narracao}"`);
 
-  console.log(`[LP 3/3] Gerando imagem contextual do produto...`);
   const imagePath = path.join('inputs', `${slug}.png`);
-  await generateProductImage({ prompt: briefing.imagemPrompt, outputPath: imagePath });
+  if (args['ref-foto']) {
+    console.log(`[LP 3/3] Gerando imagem contextual do produto (com o rosto da foto de referência)...`);
+    const refPrompt = `Using the attached reference photo as the person's face and likeness (keep their exact real facial features, skin tone, hair and expression precisely as shown), generate this scene: ${briefing.imagemPrompt}`;
+    await img2img({ inputPaths: args['ref-foto'], prompt: refPrompt, outputPath: imagePath, aspectRatio: '9:16' });
+  } else {
+    console.log(`[LP 3/3] Gerando imagem contextual do produto...`);
+    await generateProductImage({ prompt: briefing.imagemPrompt, outputPath: imagePath });
+  }
   console.log(`   imagem: ${imagePath}`);
 
   const project = {

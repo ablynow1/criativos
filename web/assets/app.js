@@ -163,7 +163,7 @@ function novoCriativo() {
   const d = S.config?.defaults || {};
   return {
     id: null, nome: '', modo: 'manual', lp_url: '',
-    ref_foto: '', quadro_prompt_id: '', quadro_prompt: '', moldura: 'ornate-gold', cenario: '',
+    ref_foto: '', quadro_prompt_id: '', quadro_prompt: '', quadro_grupo: '', quadro_nome: '', moldura: 'ornate-gold', cenario: '',
     narracao: '', voz: d.voz || 'gemini-tts:Charon', estiloLegenda: d.estiloLegenda || 'contorno',
     direcao_voz: '',
     audio: { ambiente: true, musica: 'emocional' },
@@ -232,7 +232,7 @@ function render() {
 // ============ ESTÚDIO (lista) ============
 function vEstudio() {
   const list = S.criativos.map(c => {
-    const thumb = c.modo === 'quadro' ? c.ref_foto : c.cenas?.[0]?.imagem;
+    const thumb = (c.modo === 'quadro' || c.modo === 'lp') ? (c.ref_foto || c.cenas?.[0]?.imagem) : c.cenas?.[0]?.imagem;
     const job = jobDoCriativo(c.id);
     const done = S.jobs.find(j => j.criativo_id === c.id && j.status === 'done');
     const est = estimate(c.narracao);
@@ -269,8 +269,8 @@ function renderEditor() {
   const est = estimate(c.narracao);
   const modoHint = {
     manual: 'Você envia a imagem de cada cena + o roteiro. Controle total.',
-    quadro: 'Escolhe o estilo do quadro e envia a foto do avatar — a IA pinta a arte e gera o avatar segurando o quadro emoldurado.',
-    lp: 'Só a URL da landing page — o Gemini escreve o briefing, a narração e gera a imagem sozinho.',
+    quadro: 'Escolhe o estilo do quadro — a IA pinta a arte e gera o avatar segurando o quadro emoldurado. Foto é opcional: sem ela, a IA inventa um personagem pelo contexto (estilo + cenário).',
+    lp: 'Só a URL da landing page — o Gemini escreve o briefing, a narração e gera a imagem sozinho. Foto de referência é opcional, pra usar um rosto real na cena.',
   }[modo];
 
   const quadroGroups = {};
@@ -284,16 +284,30 @@ function renderEditor() {
       <label class="f"><span class="lbl">URL da LP</span>
         <input class="in" id="f-lp" type="url" value="${esc(c.lp_url)}" placeholder="https://atelier.usemalta.com/pinturapai"></label>
       <div class="hint">O worker baixa a LP, o Gemini escreve o briefing + narração, gera a imagem e roda o pipeline inteiro sozinho.</div>
+      <div class="hr"></div>
+      <div class="row" style="align-items:flex-start">
+        <div class="imgbox ${c.ref_foto ? 'has' : ''}" id="ref-box" style="width:76px;height:114px;${c.ref_foto ? `background-image:url('${esc(c.ref_foto)}')` : ''}">${c.ref_foto ? '' : 'sem foto — opcional'}</div>
+        <div class="grow">
+          <div class="hint" style="margin-bottom:8px">${c.ref_foto ? 'Foto de referência — o rosto real dela entra na imagem que o Gemini gera.' : 'Opcional. Sem foto, a imagem sai 100% automática (como sempre). Com foto, o rosto real dela é usado na cena gerada pelo briefing.'}</div>
+          <div class="row">
+            <button class="btn sm grow" id="ref-btn">${I.up} ${c.ref_foto ? 'Trocar foto' : 'Enviar foto'}</button>
+            ${c.ref_foto ? `<button class="iconbtn" id="ref-clear" aria-label="remover foto">${I.x}</button>` : ''}
+          </div>
+        </div>
+      </div>
     </div>`;
 
   const quadroCard = `
     <div class="card">
       <h3>O quadro</h3>
       <div class="row" style="align-items:flex-start;margin-bottom:14px">
-        <div class="imgbox ${c.ref_foto ? 'has' : ''}" id="ref-box" style="width:88px;height:132px;${c.ref_foto ? `background-image:url('${esc(c.ref_foto)}')` : ''}">${c.ref_foto ? '' : 'foto do avatar'}</div>
+        <div class="imgbox ${c.ref_foto ? 'has' : ''}" id="ref-box" style="width:88px;height:132px;${c.ref_foto ? `background-image:url('${esc(c.ref_foto)}')` : ''}">${c.ref_foto ? '' : 'sem foto — opcional'}</div>
         <div class="grow">
-          <div class="hint" style="margin-bottom:8px">Foto de referência do rosto (pai, mãe, criança, pet…). É a partir dela que a arte é pintada.</div>
-          <button class="btn sm block" id="ref-btn">${I.up} ${c.ref_foto ? 'Trocar foto' : 'Enviar foto'}</button>
+          <div class="hint" style="margin-bottom:8px">${c.ref_foto ? 'Foto de referência do rosto — é a partir dela que a arte é pintada.' : 'Opcional. Sem foto, a IA inventa um personagem fictício com base no estilo escolhido e no cenário abaixo (descreva o cenário pra guiar a criação).'}</div>
+          <div class="row">
+            <button class="btn sm grow" id="ref-btn">${I.up} ${c.ref_foto ? 'Trocar foto' : 'Enviar foto'}</button>
+            ${c.ref_foto ? `<button class="iconbtn" id="ref-clear" aria-label="remover foto">${I.x}</button>` : ''}
+          </div>
         </div>
       </div>
       <label class="f"><span class="lbl">Estilo do quadro</span>
@@ -302,8 +316,8 @@ function renderEditor() {
         </button></label>
       ${c.quadro_tipo === 'boneco' ? '' : `<label class="f"><span class="lbl">Moldura</span>
         <select class="in" id="f-moldura">${molduras.map(m => `<option value="${esc(m.id)}" ${m.id === (c.moldura || 'ornate-gold') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></label>`}
-      <label class="f"><span class="lbl">Cenário (opcional)</span>
-        <input class="in" id="f-cenario" value="${esc(c.cenario || '')}" placeholder="ex: a warm cozy living room (deixe vazio pro padrão)"></label>
+      <label class="f"><span class="lbl">Cenário ${c.ref_foto ? '(opcional)' : '— vira contexto pro personagem fictício'}</span>
+        <input class="in" id="f-cenario" value="${esc(c.cenario || '')}" placeholder="${c.ref_foto ? 'ex: a warm cozy living room (deixe vazio pro padrão)' : 'ex: quarto do corinthians, sala de casa simples…'}"></label>
     </div>`;
 
   const narracaoCard = `
@@ -440,13 +454,23 @@ function bEditor() {
   $('#f-musica').onchange = (e) => c.audio.musica = e.target.value;
   $('#f-ambiente').onclick = () => { c.audio.ambiente = c.audio.ambiente === false; renderEditor(); };
 
-  if (c.modo === 'quadro') {
+  // upload de foto de referência (opcional) — compartilhado entre modo LP e Quadro
+  if (c.modo === 'lp' || c.modo === 'quadro') {
     $('#ref-btn').onclick = () => pickImage(url => { c.ref_foto = url; renderEditor(); });
     $('#ref-box').onclick = () => pickImage(url => { c.ref_foto = url; renderEditor(); });
+    const refClear = $('#ref-clear');
+    if (refClear) refClear.onclick = (e) => { e.stopPropagation(); c.ref_foto = ''; renderEditor(); };
+  }
+
+  if (c.modo === 'quadro') {
     const mold = $('#f-moldura');
     if (mold) mold.onchange = (e) => c.moldura = e.target.value;
     $('#f-cenario').oninput = (e) => c.cenario = e.target.value;
-    $('#pick-quadro').onclick = () => pickQuadro((q) => { c.quadro_prompt_id = q.id; c.quadro_prompt = q.texto; c.quadro_tipo = q.tipo || 'quadro'; renderEditor(); });
+    $('#pick-quadro').onclick = () => pickQuadro((q) => {
+      c.quadro_prompt_id = q.id; c.quadro_prompt = q.texto; c.quadro_tipo = q.tipo || 'quadro';
+      c.quadro_grupo = q.grupo || ''; c.quadro_nome = q.nome || '';
+      renderEditor();
+    });
   }
 
   if (c.modo === 'lp') {
