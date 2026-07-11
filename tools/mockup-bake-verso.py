@@ -195,9 +195,12 @@ def main():
             alpha = (cv2.GaussianBlur(poly, (9, 9), 0).astype(np.float32) / 255.0) * w_kraft
             alpha = alpha[..., None]
             f = (warped * alpha + f * (1 - alpha)).astype(np.uint8)
-            # verde estrito que sobrou FORA do poligono = borda do painel que o
-            # fit nao alcancou -> neutraliza (vira sombra escura, nao verde)
-            resid = green_mask(f) & ~poly
+            # verde que sobrou FORA do poligono = fresta entre o fit e a moldura.
+            # Faixa RELAXADA (S>=25, V>=18): a fresta e' verde-ESCURA e escapava
+            # da faixa estrita — era a linha verde que o Vitor via na borda.
+            hsv_f = cv2.cvtColor(f, cv2.COLOR_BGR2HSV)
+            resid = cv2.inRange(hsv_f, (H_LO, 25, 18), (H_HI, 255, 255)) & ~poly
+            resid = cv2.dilate(resid, np.ones((3, 3), np.uint8))
             if resid.any():
                 b, g, r = cv2.split(f.astype(np.int16))
                 capv = (b + r) // 2

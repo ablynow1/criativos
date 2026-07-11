@@ -13,18 +13,18 @@ OUT=output/mockup-loja/mockup-loja-greenscreen-25s.mp4
 
 # clipe:in:out  (10 segmentos live = 21.5s; endcard 3.5s fecha 25.00s)
 SEGMENTS=(
-  "V0:0.0:2.0"   # 1 ABERTURA: verso kraft -> ela GIRA -> verde (mov real) (2.0s)
+  "V13:0.6:3.7"  # 1 ABERTURA 100% NATIVA: verso kraft real -> gira -> verde (3.1s)
   "V2:0.2:2.3"   # 2 frontal medium                                  (2.1s)
-  "V1:5.6:7.8"   # 3 wide frontal estavel, sorrindo                  (2.2s)
+  "V1:5.8:7.8"   # 3 wide frontal estavel, sorrindo                  (2.0s)
   "V3:0.4:2.4"   # 4 close glide no quadro                           (2.0s)
   "V4:0.2:2.1"   # 5 maos na borda (antes do push-in forte)          (1.9s)
-  "V2:4.2:7.8"   # 6 medium sorrindo push-in                         (3.6s)
+  "V2:4.5:7.8"   # 6 medium sorrindo push-in                         (3.3s)
   "V5:1.5:3.1"   # 7 parede, ela admirando                           (1.6s)
   "V6:0.3:1.7"   # 8 parede lateral                                  (1.4s)
   "V6:3.2:4.8"   # 9 close parede dolly (quadro inteiro)             (1.6s)
-  "V5:4.2:7.5"   # 10 wide parede final                              (3.3s)
+  "V5:4.6:7.5"   # 10 wide parede final                              (2.9s)
 )
-ENDCARD_DUR=3.3
+ENDCARD_DUR=3.1
 
 inputs=(); filter=""; concat=""; n=0
 declare -a seen=()

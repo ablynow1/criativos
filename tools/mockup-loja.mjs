@@ -84,6 +84,15 @@ Change only the pose: medium-wide shot, she holds the frame nearly EDGE-ON (abou
     prompt: `Use the reference image ONLY for the woman's identity (same face, same hair, same off-white satin dress, same red nails), the same picture-framing studio and the same large frame with the thin matte-black moulding.
 New shot: full-body wide shot. She holds the very large vertical frame turned about 120 degrees AWAY from the camera — we see it at a steep three-quarter angle from behind, both hands gripping the sides, caught right at the moment she starts to swing it around toward the camera to present it. The panel surface visible to us is a solid flat uniform bright chroma-key green (#00FF00), no reflections. Warm cozy store lighting, shallow depth of field, natural smartphone-video look, no camera UI overlay.`,
   },
+  // K11 = verso do quadro FIEL À FOTO DE REFERÊNCIA do Vitor, gerado limpo do
+  // zero (2 refs: K1 pra identidade/loja + kraft-texture pro verso). Tentativa
+  // de animar direto no Veo (se o RAI deixar, a abertura sai 100% nativa).
+  K11: {
+    base: ['K1', 'kraft-texture'],
+    prompt: `First reference image: use ONLY for the woman's identity (same face, same long wavy honey-blonde hair, same off-white satin dress, same red nails) and the same picture-framing studio background.
+Second reference image: the exact BACK of the framed picture to reproduce.
+New shot: full-body wide shot. She stands in the store holding the very large vertical frame turned AWAY from the camera at a gentle angle (about 25 degrees), both hands on the sides, about to turn it around to present it. We see the BACK of the frame exactly as in the second reference: a smooth light-brown MDF hardboard panel in the center, a wide border of orange-tan kraft paper tape around it, a small silver sawtooth metal hanger at the top center, and the thin black moulding as the outer edge. Clean, tidy, realistic product back. Warm cozy store lighting, shallow depth of field, natural smartphone-video look, no camera UI overlay.`,
+  },
 };
 
 // Prompts de movimento do Veo (câmera discreta estilo UGC + som ambiente).
@@ -135,6 +144,23 @@ const VEO = {
     kf: 'K10',
     prompt: `She swings the large frame all the way around toward the camera in one smooth confident motion — it rotates from facing away, past edge-on, until its FRONT face ends up squarely facing the camera: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare. She ends holding it steady with both hands, smiling warmly at the camera. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone, soft fabric and wood sounds.`,
   },
+  // V11/V12 = giro LENTO nativo (substitui a rampa de velocidade com minterpolate,
+  // que fazia o FUNDO piscar — artefato de frames interpolados). Duas formulações;
+  // usar a que der a fase "de costas" mais longa e o giro mais suave.
+  V11: {
+    kf: 'K10',
+    prompt: `She holds the large frame turned away from the camera for a calm beat, then turns it around VERY SLOWLY and smoothly — the rotation is gentle and deliberate, taking several seconds to pass edge-on until the FRONT face gradually comes into full view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare. She ends holding it steady with both hands, smiling warmly. The entire motion is slow, graceful, unhurried. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone.`,
+  },
+  V12: {
+    kf: 'K10',
+    prompt: `In slow, elegant motion she gradually rotates the large frame toward the camera — like a gentle unhurried reveal lasting most of the clip. It slowly passes edge-on and the FRONT face eases into view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare. She finishes holding it steady, green facing the camera, with a warm smile. Slow deliberate arm movement throughout, nothing rushed. Static camera, very subtle handheld sway. Quiet store room tone.`,
+  },
+  // V13 = giro a partir do K11 (verso kraft REAL no keyframe) — se o RAI deixar,
+  // a abertura sai 100% nativa do Veo, sem pintura nenhuma.
+  V13: {
+    kf: 'K11',
+    prompt: `She holds the framed picture showing its plain kraft-paper back, then turns it around toward the camera in one smooth confident motion — the frame rotates past edge-on and its FRONT face comes fully into view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare, edge-to-edge green. She ends holding it steady with both hands, green squarely facing the camera, smiling warmly. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone.`,
+  },
 };
 
 async function makeKeyframes(only) {
@@ -150,13 +176,15 @@ async function makeKeyframes(only) {
 
   for (const id of Object.keys(KEYFRAMES).filter((k) => k !== 'K1')) {
     if (only.length && !only.includes(id)) continue;
-    // `base` deriva de outro keyframe (ex: K8/K9 do verso K7); default = K1.
-    const baseId = KEYFRAMES[id].base || 'K1';
-    const basePath = path.join(KF, `${baseId}.png`);
-    if (!existsSync(basePath)) throw new Error(`Base ${baseId}.png não existe (gere antes de ${id}).`);
-    console.log(`→ ${id} (img2img a partir do ${baseId})…`);
+    // `base` deriva de outro(s) keyframe(s) (string ou array); default = K1.
+    const baseIds = [].concat(KEYFRAMES[id].base || 'K1');
+    const basePaths = baseIds.map((b) => path.join(KF, `${b}.png`));
+    for (const p of basePaths) {
+      if (!existsSync(p)) throw new Error(`Base ${p} não existe (gere antes de ${id}).`);
+    }
+    console.log(`→ ${id} (img2img a partir de ${baseIds.join('+')})…`);
     await img2img({
-      inputPaths: basePath,
+      inputPaths: basePaths,
       prompt: KEYFRAMES[id].prompt,
       outputPath: path.join(KF, `${id}.png`),
       aspectRatio: '9:16',
