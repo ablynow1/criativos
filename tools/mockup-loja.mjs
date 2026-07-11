@@ -93,6 +93,15 @@ New shot: full-body wide shot. She holds the very large vertical frame turned ab
 Second reference image: the exact BACK of the framed picture to reproduce.
 New shot: full-body wide shot. She stands in the store holding the very large vertical frame turned AWAY from the camera at a gentle angle (about 25 degrees), both hands on the sides, about to turn it around to present it. We see the BACK of the frame exactly as in the second reference: a smooth light-brown MDF hardboard panel in the center, a wide border of orange-tan kraft paper tape around it, a small silver sawtooth metal hanger at the top center, and the thin black moulding as the outer edge. Clean, tidy, realistic product back. Warm cozy store lighting, shallow depth of field, natural smartphone-video look, no camera UI overlay.`,
   },
+  // K12 = verso v2, réplica EXATA da foto do quadro real do Vitor (moldura de
+  // madeira crua clara, ripa no topo com pendural serrilhado + 2 fitas, fita
+  // kraft laranja no perímetro, painel MDF marrom). Substitui o K11.
+  K12: {
+    base: ['K1', 'kraft-texture-v2'],
+    prompt: `First reference image: use ONLY for the woman's identity (same face, same long wavy honey-blonde hair, same off-white satin dress, same red nails) and the same picture-framing studio background.
+Second reference image: the exact BACK of the framed picture — reproduce it faithfully.
+New shot: full-body wide shot. She stands in the store holding the very large vertical frame turned AWAY from the camera at a gentle angle (about 25 degrees), both hands gripping the sides, about to turn it around to present it. The BACK of the frame faces us exactly as in the second reference: outer edge of LIGHT RAW PINE WOOD (pale unpainted wood), a horizontal light-wood slat at the top with a small galvanized sawtooth metal hanger at its center and two crooked strips of orange-tan kraft tape beside it, a wide border of warm orange-tan gummed kraft tape around the inner perimeter with folded corners, and a medium-brown MDF hardboard panel in the center with subtle stains and tiny staple marks. Warm cozy store lighting, shallow depth of field, natural smartphone-video look, no camera UI overlay.`,
+  },
 };
 
 // Prompts de movimento do Veo (câmera discreta estilo UGC + som ambiente).
@@ -160,6 +169,11 @@ const VEO = {
   V13: {
     kf: 'K11',
     prompt: `She holds the framed picture showing its plain kraft-paper back, then turns it around toward the camera in one smooth confident motion — the frame rotates past edge-on and its FRONT face comes fully into view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare, edge-to-edge green. She ends holding it steady with both hands, green squarely facing the camera, smiling warmly. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone.`,
+  },
+  // V14 = giro a partir do K12 (verso = réplica exata da foto do Vitor).
+  V14: {
+    kf: 'K12',
+    prompt: `She holds the framed picture showing its kraft-paper back with the light raw-wood edge, then turns it around toward the camera in one smooth confident motion — the frame rotates past edge-on and its FRONT face comes fully into view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare, edge-to-edge green. She ends holding it steady with both hands, green squarely facing the camera, smiling warmly. The back stays exactly as it is (raw wood edge, kraft tape, hanger) until it turns out of view. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone.`,
   },
 };
 
