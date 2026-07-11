@@ -29,9 +29,11 @@ FF = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"
 if not os.path.exists(FF):
     FF = "ffmpeg"
 
-# Faixa HSV do verde chroma (H em [0,179] no OpenCV; #00FF00 => H=60)
+# Faixa HSV do verde chroma (H em [0,179] no OpenCV; #00FF00 => H=60).
+# S/V baixos de proposito: pega tambem verde amaciado por motion-blur/interpolacao
+# nas bordas do flip. Seguro aqui — a cena (madeira, vestido, molduras) nao tem verde.
 H_LO, H_HI = 35, 90
-S_MIN, V_MIN = 70, 60
+S_MIN, V_MIN = 45, 45
 
 
 def green_mask(bgr):
@@ -74,6 +76,20 @@ def despill(bgr, mask):
     b, g, r = cv2.split(bgr.astype(np.int16))
     cap = (b + r) // 2
     spill = (g > cap) & (ring > 0)
+    g[spill] = cap[spill]
+    return cv2.merge([b, g, r]).clip(0, 255).astype(np.uint8)
+
+
+def kill_green(bgr):
+    """Neutraliza QUALQUER verde residual do frame ja' composto (fiapos de borda no
+    edge-on que o warp da arte nao cobriu). So' toca pixel verde-dominante — a arte
+    ja' composta e a cena (sem verde) ficam intactas."""
+    resid = green_mask(bgr)
+    if not resid.any():
+        return bgr
+    b, g, r = cv2.split(bgr.astype(np.int16))
+    cap = (b + r) // 2
+    spill = (g > cap) & (resid > 0)
     g[spill] = cap[spill]
     return cv2.merge([b, g, r]).clip(0, 255).astype(np.uint8)
 
@@ -187,6 +203,8 @@ def main():
                 else:
                     frame[y:y + lh, x:x + lw] = logo_r
 
+        # mata fiapo de verde residual (borda do quadro no edge-on que o warp nao cobriu)
+        frame = kill_green(frame)
         vw.write(frame)
         n += 1
 

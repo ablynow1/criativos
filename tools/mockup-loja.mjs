@@ -64,6 +64,26 @@ New shot: no people. The large green-screen frame hanging on the clean white gal
 New shot: full-body wide shot, she stands in the middle of the store holding the very large vertical frame turned AWAY from the camera — we see the BACK of the framed picture facing us, tilted about 20 degrees, as if she is just about to turn it around to present it.
 CRITICAL — render the BACK of a real framed picture exactly like this: a warm medium-brown KRAFT PAPER dust cover stretched across the back; a border of lighter beige kraft masking tape sealing the paper all around the inner edge of the frame; a small galvanized silver metal SAWTOOTH TRIANGLE hanger fixed at the top-center; the thin matte-black wooden moulding visible as the outer edge all around. Slightly worn, authentic, a few small staples and marks. NO green anywhere on this back — it is brown kraft paper. Warm cozy store lighting, shallow depth of field, natural smartphone-video look, no camera UI overlay.`,
   },
+  // K8/K9 = verso do quadro EM ÂNGULO (não chapado de frente) — o keyframe frontal
+  // do verso (K7) travava o RAI do Veo; em ângulo (como o K1 verde, que animou liso)
+  // deve passar. Deriva do K7 pra manter o verso realista (kraft+pendural).
+  K8: {
+    base: 'K7',
+    prompt: `Keep the SAME woman (face, hair, off-white satin dress, red nails), the SAME framing store, and the SAME large frame showing its brown kraft-paper BACK with the beige tape border and the small metal sawtooth triangle hanger.
+Change only the pose: full-body wide shot, she holds the frame turned about 40 degrees to her side (three-quarter view of the kraft back in perspective), both hands gripping the sides, mid-motion as if she just started to swing it around to show the front. Natural smartphone-video look, warm store light, no camera UI.`,
+  },
+  K9: {
+    base: 'K7',
+    prompt: `Keep the SAME woman (face, hair, off-white satin dress, red nails), the SAME framing store, and the SAME large frame showing its brown kraft-paper BACK with the beige tape border and the small metal sawtooth triangle hanger.
+Change only the pose: medium-wide shot, she holds the frame nearly EDGE-ON (about 70 degrees turned), one hand on the top edge and one on the side, caught in the middle of turning it around toward the camera. We still see the kraft-paper back at a steep angle. Natural smartphone-video look, warm store light, no camera UI.`,
+  },
+  // K10 = quadro VERDE virado ~120° pra longe (ela prestes a girar pra mostrar).
+  // Keyframe verde passa no RAI (o do verso kraft trava). Depois eu pinto o kraft
+  // por cima da fase "de costas" na pós — o Veo só precisa animar o GIRO dela.
+  K10: {
+    prompt: `Use the reference image ONLY for the woman's identity (same face, same hair, same off-white satin dress, same red nails), the same picture-framing studio and the same large frame with the thin matte-black moulding.
+New shot: full-body wide shot. She holds the very large vertical frame turned about 120 degrees AWAY from the camera — we see it at a steep three-quarter angle from behind, both hands gripping the sides, caught right at the moment she starts to swing it around toward the camera to present it. The panel surface visible to us is a solid flat uniform bright chroma-key green (#00FF00), no reflections. Warm cozy store lighting, shallow depth of field, natural smartphone-video look, no camera UI overlay.`,
+  },
 };
 
 // Prompts de movimento do Veo (câmera discreta estilo UGC + som ambiente).
@@ -99,6 +119,22 @@ const VEO = {
     kf: 'K7',
     prompt: `She stands holding the large picture frame with its brown kraft-paper BACK gently facing the camera, looking down at it warmly. She makes small natural movements — a subtle handheld sway, adjusting her grip, and slowly begins to tilt the frame forward just a little, as if about to turn it around to show it. The kraft-paper back and the small metal hanger stay clearly visible the whole time. No large rotation. Calm, gentle, elegant. Static camera, no zoom. Quiet framing-shop room tone, soft fabric and wood sounds.`,
   },
+  // V8/V9 = GIRO real do verso (ela vira o quadro). Keyframe em ângulo (K8/K9) pra
+  // não travar o RAI. Ela completa o giro e a FRENTE verde aparece de frente.
+  V8: {
+    kf: 'K8',
+    prompt: `She confidently turns the large frame around toward the camera in one smooth motion — starting from its brown kraft-paper back at an angle, rotating past edge-on until the FRONT face comes fully into view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare, edge to edge green. She ends holding it steady, green facing the camera, with a warm smile. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone, soft fabric and wood sounds.`,
+  },
+  V9: {
+    kf: 'K9',
+    prompt: `She finishes turning the large frame around so its FRONT face swings into view facing the camera: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare, edge to edge green. She ends holding it steady with both hands, green squarely facing the camera, smiling warmly. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone, soft fabric and wood sounds.`,
+  },
+  // V10 = GIRO amplo (de costas ~120° até de frente). Quadro verde (passa no RAI);
+  // o kraft é pintado depois na fase de costas. Movimento REAL dos braços dela.
+  V10: {
+    kf: 'K10',
+    prompt: `She swings the large frame all the way around toward the camera in one smooth confident motion — it rotates from facing away, past edge-on, until its FRONT face ends up squarely facing the camera: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare. She ends holding it steady with both hands, smiling warmly at the camera. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone, soft fabric and wood sounds.`,
+  },
 };
 
 async function makeKeyframes(only) {
@@ -114,9 +150,13 @@ async function makeKeyframes(only) {
 
   for (const id of Object.keys(KEYFRAMES).filter((k) => k !== 'K1')) {
     if (only.length && !only.includes(id)) continue;
-    console.log(`→ ${id} (img2img a partir do K1)…`);
+    // `base` deriva de outro keyframe (ex: K8/K9 do verso K7); default = K1.
+    const baseId = KEYFRAMES[id].base || 'K1';
+    const basePath = path.join(KF, `${baseId}.png`);
+    if (!existsSync(basePath)) throw new Error(`Base ${baseId}.png não existe (gere antes de ${id}).`);
+    console.log(`→ ${id} (img2img a partir do ${baseId})…`);
     await img2img({
-      inputPaths: masterPath,
+      inputPaths: basePath,
       prompt: KEYFRAMES[id].prompt,
       outputPath: path.join(KF, `${id}.png`),
       aspectRatio: '9:16',
