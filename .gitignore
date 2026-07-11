@@ -10,3 +10,5 @@ web/data/
 web/media/
 tmp/cricri/
 inputs/cricri-*
+tools/.venv-compose/
+output/mockup-loja/
