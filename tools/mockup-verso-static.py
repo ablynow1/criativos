@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
 """Compoe a FOTO REAL do verso do quadro no keyframe estatico (K12 -> K15).
 
-Etapa 1 do fluxo aprovado com o Vitor: primeiro a IMAGEM com o verso correto
-(pra aprovacao), so depois o video. Nada de img2img aqui — o Nano Banana lava
-as cores da fita/MDF; a foto entra por warp direto (homografia unica), entao
-as cores sao literalmente as da foto.
+v4 — correcao do "torto" apontado pelo Vitor na v3:
+A v3 ancorava a foto nos 4 cantos EXTERNOS da silhueta. So que o verso do K12
+nao e' plano unico: o painel (fita+MDF) e' REBAIXADO dentro da moldura (bar ->
+sulco -> friso -> degrau -> painel). Ancorar no contorno externo mistura dois
+planos de profundidade e a paralaxe roda o miolo (~2 graus = torto visivel).
 
-- Retifica o verso na foto real (4 cantos da borda de pinus) pra um retangulo.
-- Warpa esse retangulo pros 4 cantos da silhueta do verso no keyframe.
-- Luz: fit PLANAR (linear em x,y) da luminancia L da cena dentro do quad,
-  aplicado como mapa de ganho na textura — preserva o gradiente da loja sem
-  imprimir fantasmas do verso antigo; a/b (cor) ficam os da foto real.
-- Oclusao: maos (mascara de pele) ficam POR CIMA.
-- Borda: mascara erodida 1px + feather curto — a linha escura fina da
-  silhueta original sobrevive e ancora o quadro no fundo.
-- Nitidez: a textura e' levemente borrada pra casar com a acutancia da cena.
+O certo (v4): mapear o RETANGULO DO PAINEL da foto retificada direto no quad
+do PAINEL visivel do K12 (as linhas de degrau onde a fita comeca). A borda de
+pinus, o friso e a banda escura do rebaixo do K12 ficam originais — sao eles
+que dao o 3D — e qualquer sobra de fita do K12 entre o paste e o degrau e'
+kraft-sobre-kraft (continua, invisivel). No TOPO a mascara sobe ate' perto da
+silhueta pra engolir a ripa+pendural+fitas do K12 (senao ficam tocos duplos);
+o excesso de fonte vem de BORDER_REPLICATE (vira pinus, que casa com a barra).
 
 Uso:
   tools/.venv-compose/bin/python tools/mockup-verso-static.py
-(cantos hardcoded pro par K12 + inputs/verso-real.jpeg; editar abaixo se mudar)
 """
 import cv2
 import numpy as np
@@ -31,18 +29,28 @@ OUT_FLAT = "output/mockup-loja/keyframes/verso-real-full-flat.png"
 # cantos do verso COMPLETO (borda externa de pinus) na foto real (1200x1600)
 FOTO_QUAD = np.array([[202, 248], [1044, 233], [1030, 1300], [243, 1313]],
                      dtype=np.float32)
-# cantos da silhueta do verso no K12 (768x1376), lidos em zoom 5x
-KEY_QUAD = np.array([[411, 497], [743, 541], [615, 1068], [328, 1003]],
-                    dtype=np.float32)
-# Poligonos dos DEDOS dela por cima do quadro (lidos em zoom 4x no K12).
-# Range HSV de pele nao serve aqui: pinus/kraft caem no mesmo range e a pintura
-# fura (v1) ou fita original vaza dentro do ROI (v2). Copiar o original de
-# volta nesses poligonos e' exato — e se pegarem 2-3px de pinus, o pinus da
-# foto cai no mesmo lugar, invisivel.
+# silhueta externa do verso no K12 (so pra CLIPAR a mascara)
+KEY_OUTER = np.array([[411, 497], [743, 541], [615, 1068], [328, 1003]],
+                     dtype=np.float32)
+# retangulo do PAINEL (fita+ripa+MDF, sem pinus) na textura flat retificada
+PANEL_FLAT = (13, 45, 800, 1043)  # x0,y0,x1,y1
+# Margens (px de cena) da silhueta ate' o painel colado, POR LADO.
+# O quad do painel e' a silhueta ENCOLHIDA por essas margens (offset de reta +
+# intersecao) — paralelismo com a moldura POR CONSTRUCAO, que e' o que o olho
+# le como "reto". Ler o degrau do K12 ponto a ponto nao funciona: a borda
+# gerada varia de perfil (37-44px no canto sup-esq, ~15px no meio-esq) e a
+# fita gerada e' MAIS saturada que a da foto, entao qualquer sobra grita.
+# Margens ficam ABAIXO do minimo real de cada lado pra fita do K12 sumir
+# inteira embaixo do paste (fita da foto contra pinus do K12 = degrau limpo).
+FLATTEN_SIGMA = 80    # achata a luz baked da foto (vinco de sombra na direita)
+FLATTEN_AMT = 0.7     # forca do achatamento (1 = total)
+MARGIN_CLAMP = (6.0, 20.0)  # limites da margem medida por lado
+TOP_RAISE = 70  # px de cena que a mascara sobe no topo (engole ripa/pendural
+                # do K12); clipado pela silhueta externa
+# Poligonos dos DEDOS dela por cima do quadro (copiar original de volta).
+# Range HSV de pele nao serve: pinus/kraft caem no mesmo range.
 FINGER_POLYS = [
-    # ponta do dedo + unha da mao direita, pega de cima na aresta esquerda
     [(363, 610), (400, 614), (401, 655), (385, 664), (363, 650)],
-    # dedos + unha vermelha + sombra deles, pega de baixo na aresta esquerda
     [(296, 912), (345, 918), (360, 940), (362, 985), (330, 990), (298, 960)],
 ]
 INSET = 2.0     # px pra dentro na foto: evita fiapo de chao na borda da textura
@@ -63,6 +71,71 @@ def finger_mask(shape):
     return m
 
 
+def scale_L(lab, new_L):
+    """Troca o canal L acompanhando o croma (a,b escalam junto), senao
+    escurecer com a/b constantes SATURA a fita (foi o 'dourado' da v6)."""
+    g = np.clip(new_L / np.maximum(lab[..., 0], 1.0), 0.7, 1.3)
+    lab[..., 0] = np.clip(lab[..., 0] * g, 0, 255)
+    lab[..., 1] = np.clip(128 + (lab[..., 1] - 128) * g, 0, 255)
+    lab[..., 2] = np.clip(128 + (lab[..., 2] - 128) * g, 0, 255)
+    return lab
+
+
+def measure_margins(key, outer):
+    """Mede, por lado, a que distancia da silhueta comeca a FITA saturada do
+    K12 (S>140) e devolve margens que deixam essa fita INTEIRA sob o paste
+    (percentil 10 - 2px), clampadas. Elimina sobra de fita vivida na borda."""
+    hsv = cv2.cvtColor(key, cv2.COLOR_BGR2HSV)
+    sat = hsv[..., 1]
+    sides = {}
+    names = ["top", "right", "bottom", "left"]
+    for i, name in enumerate(names):
+        p0, p1 = outer[i], outer[(i + 1) % 4]
+        c = outer.mean(axis=0)
+        v = p1 - p0
+        n = np.array([-v[1], v[0]])
+        n = n / np.linalg.norm(n)
+        if np.dot(c - p0, n) < 0:
+            n = -n
+        dists = []
+        for t in np.linspace(0.12, 0.88, 24):
+            base = p0 + v * t
+            for d in range(3, 46):
+                x, y = (base + n * d).astype(int)
+                if 0 <= x < sat.shape[1] and 0 <= y < sat.shape[0] \
+                        and sat[y, x] > 140:
+                    dists.append(d)
+                    break
+        m = (np.percentile(dists, 10) - 2.0) if dists else MARGIN_CLAMP[1]
+        sides[name] = float(np.clip(m, *MARGIN_CLAMP))
+    return sides
+
+
+def shrink_quad(q, margins):
+    """Encolhe o quad deslocando cada aresta pra DENTRO ao longo da normal
+    (top/right/bottom/left) e re-intersectando as retas vizinhas."""
+    def offset_line(p0, p1, d):
+        v = p1 - p0
+        n = np.array([-v[1], v[0]], dtype=np.float64)
+        n /= np.linalg.norm(n)
+        c = q.mean(axis=0)
+        if np.dot(c - p0, n) < 0:
+            n = -n  # normal aponta pro centro
+        return p0 + n * d, p1 + n * d
+
+    def intersect(a0, a1, b0, b1):
+        r, s = a1 - a0, b1 - b0
+        t = np.cross(b0 - a0, s) / np.cross(r, s)
+        return a0 + t * r
+
+    q = q.astype(np.float64)
+    sides = ["top", "right", "bottom", "left"]
+    lines = [offset_line(q[i], q[(i + 1) % 4], margins[sides[i]])
+             for i in range(4)]
+    out = [intersect(*lines[(i - 1) % 4], *lines[i]) for i in range(4)]
+    return np.array(out, dtype=np.float32)
+
+
 def main():
     foto = cv2.imread(FOTO)
     key = cv2.imread(KEYFRAME)
@@ -79,15 +152,42 @@ def main():
     cv2.imwrite(OUT_FLAT, flat)
     print(f"flat: {tw}x{th} (aspecto {tw/th:.3f})")
 
-    # --- 2) luz da cena: fit planar de L SO' no MIOLO do quad ---
-    # O quad inteiro inclui a barra de pinus clara e a banda escura do rebaixo
-    # do K12 — um plano nao representa "aro claro + miolo": ele tomba e lava a
-    # textura (v2). Amostrar so o interior (quad encolhido 15%) e amortecer o
-    # gradiente resolve.
-    poly = np.zeros((Hh, W), np.uint8)
-    cv2.fillConvexPoly(poly, KEY_QUAD.astype(np.int32), 255)
-    ctr = KEY_QUAD.mean(axis=0)
-    inner_q = (ctr + (KEY_QUAD - ctr) * 0.85).astype(np.int32)
+    # achata PARCIALMENTE a iluminacao baked da foto (croma acompanha o L)
+    fl = cv2.cvtColor(flat, cv2.COLOR_BGR2LAB).astype(np.float32)
+    L = fl[..., 0].copy()
+    low = cv2.GaussianBlur(L, (0, 0), FLATTEN_SIGMA)
+    L_flat = L / np.maximum(low, 1.0) * L.mean()
+    fl = scale_L(fl, L * (1 - FLATTEN_AMT) + L_flat * FLATTEN_AMT)
+    flat = cv2.cvtColor(fl.astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+    # --- 2) homografia PAINEL->PAINEL (nao mistura planos: sem torto) ---
+    margins = measure_margins(key, KEY_OUTER.astype(np.float64))
+    print("margens medidas:", {k: round(v, 1) for k, v in margins.items()})
+    key_panel = shrink_quad(KEY_OUTER, margins)
+    print("painel na cena:", key_panel.astype(int).tolist())
+    px0, py0, px1, py1 = PANEL_FLAT
+    src = np.array([[px0, py0], [px1, py0], [px1, py1], [px0, py1]],
+                   dtype=np.float32)
+    Hk = cv2.getPerspectiveTransform(src, key_panel)
+    warped = cv2.warpPerspective(flat, Hk, (W, Hh), flags=cv2.INTER_LINEAR,
+                                 borderMode=cv2.BORDER_REPLICATE)
+    warped = cv2.GaussianBlur(warped, (0, 0), BLUR_TEX)
+
+    # --- 3) mascara: painel + faixa extra no topo, clipado na silhueta ---
+    top_dir = np.array([0, -TOP_RAISE], dtype=np.float32)
+    paste_q = np.array([key_panel[0] + top_dir, key_panel[1] + top_dir,
+                        key_panel[2], key_panel[3]], dtype=np.float32)
+    mask = np.zeros((Hh, W), np.uint8)
+    cv2.fillConvexPoly(mask, paste_q.astype(np.int32), 255)
+    outer = np.zeros((Hh, W), np.uint8)
+    cv2.fillConvexPoly(outer, KEY_OUTER.astype(np.int32), 255)
+    outer = cv2.erode(outer, np.ones((3, 3), np.uint8))  # preserva a linha
+    mask &= outer                                        # escura da silhueta
+    mask &= ~finger_mask((Hh, W))
+
+    # --- 4) luz da cena: fit planar de L dentro do painel, amortecido ---
+    ctr = key_panel.mean(axis=0)
+    inner_q = (ctr + (key_panel - ctr) * 0.9).astype(np.int32)
     inner = np.zeros((Hh, W), np.uint8)
     cv2.fillConvexPoly(inner, inner_q, 255)
     sample = inner & ~finger_mask((Hh, W))
@@ -102,28 +202,20 @@ def main():
     m_scene = vals.mean()
     gx, gy = np.meshgrid(np.arange(W), np.arange(Hh))
     plane = (coef[0] * gx + coef[1] * gy + coef[2]).astype(np.float32)
-    plane = m_scene + (plane - m_scene) * 0.7  # amortece o gradiente
+    plane = m_scene + (plane - m_scene) * 0.7
     print(f"luz: plano L = {coef[0]:+.4f}x {coef[1]:+.4f}y + {coef[2]:.1f} "
-          f"(media miolo cena {m_scene:.1f})")
+          f"(media painel cena {m_scene:.1f})")
 
-    # --- 3) warpa a textura pro quad do keyframe ---
-    src = np.array([[0, 0], [tw, 0], [tw, th], [0, th]], dtype=np.float32)
-    Hk = cv2.getPerspectiveTransform(src, KEY_QUAD)
-    warped = cv2.warpPerspective(flat, Hk, (W, Hh), flags=cv2.INTER_AREA)
-    warped = cv2.GaussianBlur(warped, (0, 0), BLUR_TEX)
-
-    # ganho de luz: plano da cena / media de L do MIOLO da textura warpada
+    # ganho UNIFORME suave, croma acompanhando (o plano fitado compunha com a
+    # luz baked da foto e o resultado eram bandas assimetricas = "torto")
     wl = cv2.cvtColor(warped, cv2.COLOR_BGR2LAB).astype(np.float32)
     m_tex = wl[..., 0][inner > 0].mean()
-    gain = np.clip(plane / max(m_tex, 1.0), 0.8, 1.25)
-    wl[..., 0] = np.clip(wl[..., 0] * gain, 0, 255)
+    g = float(np.clip(m_scene / max(m_tex, 1.0), 0.9, 1.1))
+    wl = scale_L(wl, wl[..., 0] * g)
     warped = cv2.cvtColor(wl.astype(np.uint8), cv2.COLOR_LAB2BGR)
-    print(f"luz: L miolo textura {m_tex:.1f} -> ganho medio {gain[poly > 0].mean():.2f}")
+    print(f"luz: L painel textura {m_tex:.1f} -> ganho uniforme {g:.2f}")
 
-    # --- 4) compoe: mascara erodida (preserva a linha escura da silhueta),
-    #        dedos por cima, feather curto ---
-    mask = cv2.erode(poly, np.ones((3, 3), np.uint8))  # ~1px pra dentro
-    mask &= ~finger_mask((Hh, W))
+    # --- 5) compoe com feather curto ---
     alpha = cv2.GaussianBlur(mask, (5, 5), 0).astype(np.float32) / 255.0
     alpha = alpha[..., None]
     out = (warped * alpha + key * (1 - alpha)).astype(np.uint8)
