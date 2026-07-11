@@ -57,6 +57,13 @@ New shot: wide shot of a different corner of the same store. The large green-scr
     prompt: `${SAME}
 New shot: no people. The large green-screen frame hanging on the clean white gallery wall with the black picture light above it, seen from a 30-degree side angle with gentle perspective, glass storefront and street lights softly blurred in the background. Elegant gallery mood.`,
   },
+  // K7 = keyframe do VERSO do quadro (abertura do reveal). Mesma mulher/loja/quadro,
+  // mas a face voltada pra câmera é as COSTAS reais de um quadro emoldurado.
+  K7: {
+    prompt: `Use the reference image ONLY for the woman's identity (same face, same hair, same off-white satin dress, same red nails), the same picture-framing studio and the same large frame size and proportions.
+New shot: full-body wide shot, she stands in the middle of the store holding the very large vertical frame turned AWAY from the camera — we see the BACK of the framed picture facing us, tilted about 20 degrees, as if she is just about to turn it around to present it.
+CRITICAL — render the BACK of a real framed picture exactly like this: a warm medium-brown KRAFT PAPER dust cover stretched across the back; a border of lighter beige kraft masking tape sealing the paper all around the inner edge of the frame; a small galvanized silver metal SAWTOOTH TRIANGLE hanger fixed at the top-center; the thin matte-black wooden moulding visible as the outer edge all around. Slightly worn, authentic, a few small staples and marks. NO green anywhere on this back — it is brown kraft paper. Warm cozy store lighting, shallow depth of field, natural smartphone-video look, no camera UI overlay.`,
+  },
 };
 
 // Prompts de movimento do Veo (câmera discreta estilo UGC + som ambiente).
@@ -84,6 +91,13 @@ const VEO = {
   V6: {
     kf: 'K6',
     prompt: `Slow cinematic dolly-in toward the framed flat green screen hanging on the white gallery wall, gentle parallax against the storefront background. The green surface stays perfectly uniform solid chroma green (#00FF00), no reflections. Quiet elegant gallery ambience.`,
+  },
+  // V7 = HOLD do VERSO real (kraft + pendural) com leve movimento natural.
+  // Movimento contido (sem giro grande do quadro) pra passar no filtro RAI do Veo;
+  // o giro pro verde fica no V1. Ela apenas segura o verso e começa a inclinar de leve.
+  V7: {
+    kf: 'K7',
+    prompt: `She stands holding the large picture frame with its brown kraft-paper BACK gently facing the camera, looking down at it warmly. She makes small natural movements — a subtle handheld sway, adjusting her grip, and slowly begins to tilt the frame forward just a little, as if about to turn it around to show it. The kraft-paper back and the small metal hanger stay clearly visible the whole time. No large rotation. Calm, gentle, elegant. Static camera, no zoom. Quiet framing-shop room tone, soft fabric and wood sounds.`,
   },
 };
 

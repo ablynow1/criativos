@@ -13,16 +13,17 @@ OUT=output/mockup-loja/mockup-loja-greenscreen-25s.mp4
 
 # clipe:in:out  (10 segmentos live = 21.5s; endcard 3.5s fecha 25.00s)
 SEGMENTS=(
-  "V1:1.8:4.1"   # 1 giro reveal wide (edge-on -> frontal)  (2.3s)
-  "V2:0.2:2.3"   # 2 frontal medium                         (2.1s)
-  "V1:5.8:7.8"   # 3 wide frontal estavel, sorrindo         (2.0s)
-  "V3:0.4:2.4"   # 4 close glide no quadro                  (2.0s)
-  "V4:0.2:2.1"   # 5 maos na borda (antes do push-in forte) (1.9s)
-  "V2:4.2:7.8"   # 6 medium sorrindo push-in                (3.6s)
-  "V5:1.5:3.1"   # 7 parede, ela admirando                  (1.6s)
-  "V6:0.3:1.7"   # 8 parede lateral                         (1.4s)
-  "V6:3.2:4.8"   # 9 close parede dolly (quadro inteiro)    (1.6s)
-  "V5:4.5:7.5"   # 10 wide parede final                     (3.0s)
+  "V7:0.2:1.9"   # 1 VERSO real do quadro (kraft+pendural), push-in  (1.7s)
+  "V1:2.4:4.2"   # 2 giro revelando o verde (edge-on -> frontal)     (1.8s)
+  "V2:0.2:2.3"   # 3 frontal medium                                  (2.1s)
+  "V1:5.8:7.8"   # 4 wide frontal estavel, sorrindo                  (2.0s)
+  "V3:0.4:2.4"   # 5 close glide no quadro                           (2.0s)
+  "V4:0.2:2.1"   # 6 maos na borda (antes do push-in forte)          (1.9s)
+  "V2:4.9:7.8"   # 7 medium sorrindo push-in                         (2.9s)
+  "V5:1.5:3.1"   # 8 parede, ela admirando                           (1.6s)
+  "V6:0.3:1.7"   # 9 parede lateral                                  (1.4s)
+  "V6:3.2:4.8"   # 10 close parede dolly (quadro inteiro)            (1.6s)
+  "V5:4.9:7.5"   # 11 wide parede final                              (2.6s)
 )
 ENDCARD_DUR=3.5
 
