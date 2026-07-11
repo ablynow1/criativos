@@ -13,7 +13,8 @@ OUT=output/mockup-loja/mockup-loja-greenscreen-25s.mp4
 
 # clipe:in:out  (10 segmentos live = 21.5s; endcard 3.5s fecha 25.00s)
 SEGMENTS=(
-  "V14:0.2:2.2"  # 1 ABERTURA NATIVA: verso fiel -> flip -> arte em angulo (2.0s)
+  "V14-real:0.2:2.2"  # 1 ABERTURA: FOTO REAL do verso do cliente projetada
+                 #   (tracking LK + homografia) -> flip -> arte em angulo (2.0s)
                  #   corte NO FLIP: o reflexo de vidro do Veo comeca em ~2.25s,
                  #   entao o reveal frontal acontece no corte seco pro V2
   "V2:0.2:2.3"   # 2 frontal medium                                  (2.1s)
