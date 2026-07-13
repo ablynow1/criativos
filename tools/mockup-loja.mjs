@@ -183,6 +183,40 @@ const VEO = {
     kf: 'K15',
     prompt: `She holds the framed picture showing its kraft-paper back with the light raw-wood edge, then turns it around toward the camera in one smooth confident motion — the frame rotates past edge-on and its FRONT face comes fully into view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare, edge-to-edge green. She ends holding it steady with both hands, green squarely facing the camera, smiling warmly. The back stays exactly as it is (raw wood edge, kraft tape, hanger) until it turns out of view. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone.`,
   },
+  // V1A..V6A = MODO NATIVO (arte aplicada ANTES do vídeo): os keyframes K1A..K6A
+  // saem do tools/mockup-art-keyframes.py (arte composta no quadro verde do
+  // still) e o Veo anima a cena já com a arte DENTRO do quadro — luz, motion
+  // blur e perspectiva nativos, a arte não tem como "dançar". Mesmos movimentos
+  // dos V1..V6; a instrução crítica é a arte ser PINTURA FÍSICA ESTÁTICA que só
+  // se move junto com o quadro (senão o Veo anima o conteúdo do retrato).
+  // Obs: o prompt original (giro completo ate' ficar frontal, igual ao V1
+  // verde) foi BLOQUEADO 3x pelo RAI na saida — giro de quadro grande perto
+  // de pessoa + retrato com rosto e' gatilho consistente. Sem giro passa
+  // (hold/sway passou 5/5 hoje); o wide fica a 45° apresentando, mesmo beat.
+  V1A: {
+    kf: 'K1A',
+    prompt: `She stands in the middle of the store holding the large framed painting half-turned, presenting it: she tilts the frame just a few degrees toward the camera, makes tiny natural grip adjustments, and looks between the painting and the camera with a warm proud smile. The artwork inside the thin black moulding is a STATIC physical painting — it stays EXACTLY as in the reference image, rigid and unchanged, moving only together with the frame as one solid object; nothing inside the picture moves or morphs. NO large rotation of the frame. Static camera with a very subtle handheld sway, no zoom. Quiet framing-shop room tone, soft fabric and wood sounds.`,
+  },
+  V2A: {
+    kf: 'K2A',
+    prompt: `She holds the big framed painting facing the camera, makes tiny natural adjustments to her grip, tilts her head slightly and smiles warmly. The artwork inside the thin black moulding is a STATIC physical painting — it stays exactly as in the reference image, rigid, moving only together with the frame as one solid object; nothing inside the picture moves or morphs. Very slow gentle push-in. Cozy store ambience, faint room tone.`,
+  },
+  V3A: {
+    kf: 'K3A',
+    prompt: `Slow smooth diagonal camera glide along the large framed painting and the thin black moulding, her hand with red nails steady on the edge. The artwork is a STATIC physical painting — it stays exactly as in the reference image, rigid inside the frame, changing only in natural perspective as the camera moves; nothing inside the picture moves or morphs. Soft store room tone.`,
+  },
+  V4A: {
+    kf: 'K4A',
+    prompt: `She rests her hands with red nails on the top edge of the frame, taps her fingers gently once, tilts her head and smiles at the camera. The framed artwork below is a STATIC physical painting — it stays exactly as in the reference image, rigid inside the frame; nothing inside the picture moves or morphs. Subtle slow push-in, shallow depth of field. Quiet store ambience.`,
+  },
+  V5A: {
+    kf: 'K5A',
+    prompt: `The framed painting hangs on the white gallery wall under the black picture light. The woman stands to the side quietly admiring the framed artwork, gently nodding and turning her head as she appreciates it. The artwork is a STATIC physical painting — it stays exactly as in the reference image, rigid inside the frame; nothing inside the picture moves or morphs. Static camera. Quiet store ambience.`,
+  },
+  V6A: {
+    kf: 'K6A',
+    prompt: `Slow cinematic dolly-in toward the framed painting hanging on the white gallery wall, gentle parallax against the storefront background. The artwork is a STATIC physical painting — it stays exactly as in the reference image, rigid inside the frame, changing only in natural perspective as the camera moves; nothing inside the picture moves or morphs. Quiet elegant gallery ambience.`,
+  },
 };
 
 async function makeKeyframes(only) {
