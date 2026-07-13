@@ -56,6 +56,21 @@ TOP_EXTRA = 0.16     # sombra extra no topo (moldura projeta sombra pra baixo)
 SHEEN_STR = 0.06     # brilho suave difuso vindo de cima (luz da loja na superficie)
 GRAIN = 2.2          # grao por-frame (casa o ruido/codec do video, some o "liso")
 
+# --- resposta FISICA por frame (o verde do Veo e' 100% chapado, V~253 em
+# todas as cenas: nao ha' luz real pra transferir — entao sintetizamos a
+# resposta da superficie a partir da geometria suavizada) ---
+CONTACT_FRAC = 0.013  # linha de sombra de CONTATO tela<->moldura (bem fina)
+CONTACT_STR = 0.50    # forca da linha de contato
+TILT_DIM = 0.22       # escurecimento extra maximo quando o quadro inclina
+                      # (aspecto aparente cai -> tinta recebe menos luz)
+LAMP_V_MIN = 242      # p90 de V acima do quadro pra considerar "luminaria"
+                      # (medido: parede 245-253, cenas de mao 141-233)
+LAMP_TOP = 1.11       # ganho no topo da arte sob a luminaria de galeria...
+LAMP_BOTTOM = 0.93    # ...caindo pra base (gradiente warpa junto com o quadro)
+MBLUR_GAIN = 0.6      # comprimento do motion blur = GAIN * velocidade (px/frame)
+MBLUR_MAX = 16        # teto do blur (px)
+MBLUR_MIN_V = 3.0     # abaixo dessa velocidade nao borra
+
 
 def green_mask(bgr):
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
@@ -114,12 +129,53 @@ def season_art(art):
     shade = 1.0 - SHADOW_STR * (1 - d) ** 2           # sombra interna (bevel)
     topband = np.clip(yy / (h * EDGE_FRAC), 0, 1)
     shade *= 1.0 - TOP_EXTRA * (1 - topband) ** 2      # extra no topo
+    # linha de CONTATO (oclusao ambiente onde a tela toca a moldura): fina e
+    # escura — e' ela que "assenta" a arte fisicamente dentro do quadro
+    dxc = np.clip(np.minimum(xx, w - 1 - xx) / (w * CONTACT_FRAC), 0, 1)
+    dyc = np.clip(np.minimum(yy, h - 1 - yy) / (h * CONTACT_FRAC), 0, 1)
+    dc = np.minimum(dxc, dyc)
+    shade *= 1.0 - CONTACT_STR * (1 - dc) ** 1.5
     a *= shade[..., None]
 
     # brilho difuso do topo (a luz da loja bate na superficie da tela)
     sheen = np.clip(1 - yy / h, 0, 1) ** 2
     a += (255 - a) * (SHEEN_STR * sheen[..., None])
     return np.clip(a, 0, 255).astype(np.uint8)
+
+
+def quad_aspect(q):
+    """Aspecto aparente (largura/altura) do quad — proxy de inclinacao,
+    invariante a distancia (dolly nao engana)."""
+    qw = (np.linalg.norm(q[1] - q[0]) + np.linalg.norm(q[2] - q[3])) / 2
+    qh = (np.linalg.norm(q[3] - q[0]) + np.linalg.norm(q[2] - q[1])) / 2
+    return qw / max(qh, 1.0)
+
+
+def motion_kernel(vx, vy):
+    """Kernel linha na direcao do movimento (simula shutter do video)."""
+    v = float(np.hypot(vx, vy))
+    L = int(min(MBLUR_MAX, MBLUR_GAIN * v))
+    if L < 2:
+        return None
+    k = np.zeros((L, L), np.float32)
+    cv2.line(k, (0, L // 2), (L - 1, L // 2),
+             1.0, 1)
+    M = cv2.getRotationMatrix2D((L / 2 - .5, L / 2 - .5),
+                                -np.degrees(np.arctan2(vy, vx)), 1.0)
+    k = cv2.warpAffine(k, M, (L, L))
+    s = k.sum()
+    return k / s if s > 0 else None
+
+
+def lamp_above(frame, q):
+    """True se ha' luminaria acesa logo acima do quadro (cenas de parede)."""
+    x0 = int(max(q[:, 0].min(), 0)); x1 = int(min(q[:, 0].max(), frame.shape[1]))
+    ytop = int(max(min(q[0, 1], q[1, 1]), 0))
+    y0 = max(ytop - int(0.10 * (q[:, 1].max() - q[:, 1].min())), 0)
+    if y0 >= ytop or x1 - x0 < 20:
+        return False
+    band = cv2.cvtColor(frame[y0:ytop, x0:x1], cv2.COLOR_BGR2HSV)[..., 2]
+    return band.size > 0 and np.percentile(band, 90) >= LAMP_V_MIN
 
 
 def despill(bgr, mask):
@@ -294,6 +350,47 @@ def main():
     src = np.array([[0, 0], [aw, 0], [aw, ah], [0, ah]], dtype=np.float32)
     rng = np.random.default_rng(7)
 
+    # ---------- fisica por cena/frame (a partir da geometria suavizada) ----------
+    scene_of = np.full(N, -1, int)
+    for sid, (a, b) in enumerate(segments):
+        scene_of[a:b] = sid
+
+    # luminaria acima do quadro? (checa o frame do meio de cada cena)
+    cap = cv2.VideoCapture(args.video)
+    art_by_scene = {}
+    yy = np.linspace(0, 1, ah, dtype=np.float32)[:, None, None]
+    lamp_art = np.clip(art_fit.astype(np.float32)
+                       * (LAMP_TOP + (LAMP_BOTTOM - LAMP_TOP) * yy), 0, 255
+                       ).astype(np.uint8)
+    for sid, (a, b) in enumerate(segments):
+        mid = (a + b) // 2
+        q = smooth[mid]
+        lamp = False
+        if q is not None:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, mid)
+            okf, frm = cap.read()
+            lamp = okf and lamp_above(frm, q)
+        art_by_scene[sid] = lamp_art if lamp else art_fit
+        if args.debug and q is not None:
+            print(f"  cena {a:4d}-{b:4d}: luminaria={'SIM' if lamp else 'nao'}")
+    cap.release()
+
+    # ganho de inclinacao + kernel de motion blur por frame
+    tilt_gain = np.ones(N, np.float32)
+    mkernels = [None] * N
+    for sid, (a, b) in enumerate(segments):
+        qs = [smooth[i] for i in range(a, b)]
+        if qs[0] is None:
+            continue
+        asps = np.array([quad_aspect(q) for q in qs])
+        ref = np.percentile(asps, 95)
+        tilt_gain[a:b] = np.clip(1.0 - TILT_DIM * (1.0 - asps / ref),
+                                 1.0 - TILT_DIM, 1.0)
+        for i in range(a + 1, b):
+            d = (smooth[i] - smooth[i - 1]).mean(axis=0)
+            if np.hypot(*d) >= MBLUR_MIN_V:
+                mkernels[i] = motion_kernel(d[0], d[1])
+
     # ---------- PASS 2: renderiza ----------
     tmpdir = tempfile.mkdtemp(prefix="mockup-compose-")
     silent = os.path.join(tmpdir, "silent.mp4")
@@ -309,10 +406,16 @@ def main():
         q = smooth[i]
         if q is not None:
             Hm = cv2.getPerspectiveTransform(src, q.astype(np.float32))
-            warped = cv2.warpPerspective(art_fit, Hm, (W, Hh), flags=cv2.INTER_LINEAR)
+            warped = cv2.warpPerspective(art_by_scene[scene_of[i]], Hm, (W, Hh),
+                                         flags=cv2.INTER_LINEAR)
+            wf = warped.astype(np.float32)
+            if tilt_gain[i] < 0.998:      # inclinou -> tinta recebe menos luz
+                wf *= tilt_gain[i]
+            if mkernels[i] is not None:    # quadro em movimento -> borra junto
+                wf = cv2.filter2D(wf, -1, mkernels[i])
             # grao por-frame: casa o ruido do video (arte lisa demais 'flutua')
-            warped = np.clip(warped.astype(np.float32)
-                             + rng.normal(0, GRAIN, (Hh, W, 1)), 0, 255).astype(np.uint8)
+            warped = np.clip(wf + rng.normal(0, GRAIN, (Hh, W, 1)),
+                             0, 255).astype(np.uint8)
             # oclusao POR FRAME: so' pixel verde recebe arte (mao/dedo tapam)
             mask = clean_mask(green_mask(frame))
             # restringe ao poligono suavizado (evita fiapo de verde de outra origem)
