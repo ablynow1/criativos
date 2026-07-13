@@ -180,7 +180,19 @@ def main():
         frames[kid], quads[kid] = fr, q
 
     aspects = {kid: quad_aspect(q) for kid, q in quads.items()}
-    ref_aspect = max(aspects.values())  # o mais frontal ~ aspecto real do quadro
+    # Aspecto de referencia = o mais frontal (maior largura/altura), MAS so' entre
+    # os keyframes cujo quad NAO toca a borda da tela. Quadro cortado mente o
+    # aspecto (fica falso-largo/estreito) — incluir K4/close clipado poluia o crop
+    # (ver MOCKUP-NATIVO.md §4.4). Fallback: se todos tocam a borda, usa todos.
+    def _touches_border(q, W, Hh, mg=8):
+        return (q[:, 0].min() < mg or q[:, 1].min() < mg
+                or q[:, 0].max() > W - mg or q[:, 1].max() > Hh - mg)
+    limpos = {kid: a for kid, a in aspects.items()
+              if not _touches_border(quads[kid], frames[kid].shape[1], frames[kid].shape[0])}
+    ref_aspect = max((limpos or aspects).values())
+    if limpos:
+        print(f"aspecto medido em {len(limpos)}/{len(aspects)} keyframes inteiros "
+              f"(descartados os cortados na borda)")
 
     # crop da arte pro aspecto real (mesmo crop em TODAS as cenas = mesmo produto)
     ah, aw = art.shape[:2]
