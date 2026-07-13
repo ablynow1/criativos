@@ -8,7 +8,11 @@ output/*.mp4
 !output/.gitkeep
 web/data/
 web/media/
+web/quadros/data/
+web/quadros/media/
 tmp/cricri/
+tmp/mockup-*/
 inputs/cricri-*
 tools/.venv-compose/
 output/mockup-loja/
+output/quadros/

@@ -95,31 +95,39 @@ async function main() {
   const veo = buildVeoPrompts({ movimento });
   const usados = [...new Set(segments.map((s) => s[0]).filter((c) => c !== 'ABERTURA'))];
   console.log(`[2/4] gerando ${usados.length} cenas no Veo (${usados.join(' ')})…`);
+  const genClip = async (id) => {
+    const kfa = path.join(kfDir, `${veo[id].kf}.png`);
+    if (!existsSync(kfa)) throw new Error(`${veo[id].kf}.png não existe`);
+    await generateVideoClip({
+      imagePath: kfa,
+      prompt: veo[id].prompt,
+      outputPath: path.join(clipsDir, `${id}.mp4`),
+      aspectRatio: '9:16', resolution: '1080p', durationSeconds: 8, ambiente: true,
+    });
+  };
+  // 1ª passada em lotes de 3
+  let pendentes = [...usados];
   const falhou = [];
-  for (let i = 0; i < usados.length; i += 3) {
-    const lote = usados.slice(i, i + 3);
-    const res = await Promise.allSettled(
-      lote.map(async (id) => {
-        const kfa = path.join(kfDir, `${veo[id].kf}.png`);
-        if (!existsSync(kfa)) throw new Error(`${veo[id].kf}.png não existe`);
-        console.log(`  → ${id} (a partir de ${veo[id].kf})`);
-        await generateVideoClip({
-          imagePath: kfa,
-          prompt: veo[id].prompt,
-          outputPath: path.join(clipsDir, `${id}.mp4`),
-          aspectRatio: '9:16',
-          resolution: '1080p',
-          durationSeconds: 8,
-          ambiente: true,
-        });
-      }),
-    );
+  for (let i = 0; i < pendentes.length; i += 3) {
+    const lote = pendentes.slice(i, i + 3);
+    lote.forEach((id) => console.log(`  → ${id} (a partir de ${veo[id].kf})`));
+    const res = await Promise.allSettled(lote.map((id) => genClip(id)));
     res.forEach((r, j) => {
       if (r.status === 'rejected') {
         falhou.push(lote[j]);
-        console.error(`  FALHOU ${lote[j]}: ${String(r.reason?.message).slice(0, 160)}`);
+        console.error(`  FALHOU ${lote[j]}: ${String(r.reason?.message).slice(0, 120)}`);
       }
     });
+  }
+  // RETRY: o RAI do Veo é estocástico — a mesma imagem passa numa 2ª/3ª tentativa
+  // (foi o que resolveu o pastor na mão). Retenta cada cena caída, 1 por vez.
+  for (let tent = 1; tent <= 2 && falhou.length; tent += 1) {
+    const retry = falhou.splice(0, falhou.length);
+    console.log(`  retry ${tent}/2 de: ${retry.join(' ')}`);
+    for (const id of retry) {
+      try { await genClip(id); console.log(`  ✓ ${id} passou na retentativa`); }
+      catch (e) { falhou.push(id); console.error(`  ainda falhou ${id}: ${String(e.message).slice(0, 100)}`); }
+    }
   }
   if (usaAbertura) await copyFile(aberturaClip, path.join(clipsDir, 'ABERTURA.mp4'));
 

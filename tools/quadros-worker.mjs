@@ -124,7 +124,8 @@ async function processCenario(job) {
     const p = path.join(outDir, 'keyframes', `${k}.png`);
     if (existsSync(p)) {
       const buf = await readFile(p);
-      form.append('keyframes', new Blob([buf], { type: 'image/png' }), `${k}.png`);
+      // 'keyframes[]' (com colchetes) — senão o PHP só captura o último arquivo
+      form.append('keyframes[]', new Blob([buf], { type: 'image/png' }), `${k}.png`);
     }
   }
   await call('worker_done', { form });
