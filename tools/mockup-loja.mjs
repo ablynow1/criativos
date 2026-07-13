@@ -175,6 +175,14 @@ const VEO = {
     kf: 'K12',
     prompt: `She holds the framed picture showing its kraft-paper back with the light raw-wood edge, then turns it around toward the camera in one smooth confident motion — the frame rotates past edge-on and its FRONT face comes fully into view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare, edge-to-edge green. She ends holding it steady with both hands, green squarely facing the camera, smiling warmly. The back stays exactly as it is (raw wood edge, kraft tape, hanger) until it turns out of view. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone.`,
   },
+  // V15 = giro a partir do K15 (verso = FOTO REAL do Vitor, aprovada em etapas).
+  // K15.png já existe em keyframes/ (composto por mockup-verso-colorfix.py); o
+  // makeClips lê o arquivo direto. Substitui a abertura V14-real (projeção LK
+  // rejeitada). Mesmo prompt de giro do V14.
+  V15: {
+    kf: 'K15',
+    prompt: `She holds the framed picture showing its kraft-paper back with the light raw-wood edge, then turns it around toward the camera in one smooth confident motion — the frame rotates past edge-on and its FRONT face comes fully into view: a perfectly solid, flat, uniform bright chroma-key green (#00FF00) surface inside the thin black moulding, no reflections, no glare, edge-to-edge green. She ends holding it steady with both hands, green squarely facing the camera, smiling warmly. The back stays exactly as it is (raw wood edge, kraft tape, hanger) until it turns out of view. Static camera, very subtle handheld sway, no zoom. Quiet framing-shop room tone.`,
+  },
 };
 
 async function makeKeyframes(only) {
