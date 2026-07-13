@@ -42,6 +42,20 @@ if not os.path.exists(FF):
 H_LO, H_HI = 35, 90
 S_MIN, V_MIN = 45, 45
 
+# --- integracao ("nao flutuar"): faz a arte parecer DENTRO do quadro ---
+# A arte colada crua le como adesivo: sem sombra interna da moldura, sem a luz
+# da cena, e nitida demais pro video macio. Estes parametros casam esses 3.
+ART_BLUR = 1.7       # sigma: casa a maciez do video (arte crua e' nitida demais)
+ART_GAIN = 0.93      # escurece a arte (nao "estoura" mais que a loja meio-escura)
+ART_LIFT = 7.0       # levanta os pretos (luz ambiente: nada e' preto puro na sala)
+ART_DESAT = 0.08     # tira um tico de saturacao (senao "pop" de imagem separada)
+ART_WARM_B, ART_WARM_R = 0.975, 1.025  # tom quente da loja (BGR)
+EDGE_FRAC = 0.055    # largura da sombra interna = 5.5% do lado
+SHADOW_STR = 0.42    # escurecimento maximo na borda interna da moldura
+TOP_EXTRA = 0.16     # sombra extra no topo (moldura projeta sombra pra baixo)
+SHEEN_STR = 0.06     # brilho suave difuso vindo de cima (luz da loja na superficie)
+GRAIN = 2.2          # grao por-frame (casa o ruido/codec do video, some o "liso")
+
 
 def green_mask(bgr):
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
@@ -78,6 +92,34 @@ def find_quad(mask, min_area_frac=0.02):
             return order_corners(approx)
     box = cv2.boxPoints(cv2.minAreaRect(c))  # fallback: retangulo rotacionado
     return order_corners(box)
+
+
+def season_art(art):
+    """Integra a arte na cena pra NAO 'flutuar': maciez do video, tom ambiente
+    quente, sombra interna da moldura (afunda a arte no quadro) e um brilho
+    difuso do topo. Aplicado UMA vez na arte cropada; tudo warpa junto com o
+    quadro (a sombra segue a perspectiva, sempre coerente)."""
+    a = cv2.GaussianBlur(art.astype(np.float32), (0, 0), ART_BLUR)
+    a = a * ART_GAIN + ART_LIFT                       # dim + lift dos pretos
+    gray = a.mean(axis=2, keepdims=True)
+    a = a * (1 - ART_DESAT) + gray * ART_DESAT        # dessatura leve
+    a[..., 0] *= ART_WARM_B
+    a[..., 2] *= ART_WARM_R                            # tom quente
+
+    h, w = a.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    dx = np.clip(np.minimum(xx, w - 1 - xx) / (w * EDGE_FRAC), 0, 1)
+    dy = np.clip(np.minimum(yy, h - 1 - yy) / (h * EDGE_FRAC), 0, 1)
+    d = np.minimum(dx, dy)                             # 0 na borda -> 1 pra dentro
+    shade = 1.0 - SHADOW_STR * (1 - d) ** 2           # sombra interna (bevel)
+    topband = np.clip(yy / (h * EDGE_FRAC), 0, 1)
+    shade *= 1.0 - TOP_EXTRA * (1 - topband) ** 2      # extra no topo
+    a *= shade[..., None]
+
+    # brilho difuso do topo (a luz da loja bate na superficie da tela)
+    sheen = np.clip(1 - yy / h, 0, 1) ** 2
+    a += (255 - a) * (SHEEN_STR * sheen[..., None])
+    return np.clip(a, 0, 255).astype(np.uint8)
 
 
 def despill(bgr, mask):
@@ -247,8 +289,10 @@ def main():
         art_fit = art[y0:y0 + nh, :]
     print(f"aspecto do quadro ~{frame_aspect:.3f}; arte cropada de {aw}x{ah} "
           f"para {art_fit.shape[1]}x{art_fit.shape[0]}")
+    art_fit = season_art(art_fit)  # integra: sombra interna, tom, maciez, sheen
     ah, aw = art_fit.shape[:2]
     src = np.array([[0, 0], [aw, 0], [aw, ah], [0, ah]], dtype=np.float32)
+    rng = np.random.default_rng(7)
 
     # ---------- PASS 2: renderiza ----------
     tmpdir = tempfile.mkdtemp(prefix="mockup-compose-")
@@ -266,6 +310,9 @@ def main():
         if q is not None:
             Hm = cv2.getPerspectiveTransform(src, q.astype(np.float32))
             warped = cv2.warpPerspective(art_fit, Hm, (W, Hh), flags=cv2.INTER_LINEAR)
+            # grao por-frame: casa o ruido do video (arte lisa demais 'flutua')
+            warped = np.clip(warped.astype(np.float32)
+                             + rng.normal(0, GRAIN, (Hh, W, 1)), 0, 255).astype(np.uint8)
             # oclusao POR FRAME: so' pixel verde recebe arte (mao/dedo tapam)
             mask = clean_mask(green_mask(frame))
             # restringe ao poligono suavizado (evita fiapo de verde de outra origem)
