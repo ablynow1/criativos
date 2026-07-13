@@ -11,24 +11,25 @@ FF=/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg
 CLIPS=output/mockup-loja/clips
 OUT=output/mockup-loja/mockup-loja-greenscreen-25s.mp4
 
-# clipe:in:out  (10 segmentos live = 21.5s; endcard 3.5s fecha 25.00s)
+# clipe:in:out  (10 segmentos = 25.15s; -t 25 crava 25.00s. SEM endcard —
+# Vitor pediu; os 3.6s do card branco viraram mais tempo de cena, com o fecho
+# na parede (produto pendurado), espelhando o final do anuncio de referencia.)
 SEGMENTS=(
   "V15:0.2:2.2"  # 1 ABERTURA: giro NATIVO do Veo a partir do K15 (verso = foto
                  #   real do Vitor, aprovado). Verso visivel 0.2-1.6s -> giro ->
                  #   corte NO FLIP em 2.2s (edge-on, quadro mais fino): o reveal
                  #   frontal verde acontece no corte seco pro V2. Cortar aqui
                  #   evita o intervalo bege da frente (~2.4-3.6s) e o reflexo.
-  "V2:0.2:2.3"   # 2 frontal medium                                  (2.1s)
-  "V1:5.8:7.8"   # 3 wide frontal estavel, sorrindo                  (2.0s)
-  "V3:0.4:2.4"   # 4 close glide no quadro                           (2.0s)
-  "V4:0.2:2.1"   # 5 maos na borda (antes do push-in forte)          (1.9s)
-  "V2:4.2:7.8"   # 6 medium sorrindo push-in                         (3.6s)
-  "V5:1.5:3.1"   # 7 parede, ela admirando                           (1.6s)
-  "V6:0.3:1.7"   # 8 parede lateral                                  (1.4s)
-  "V6:3.2:4.8"   # 9 close parede dolly (quadro inteiro)             (1.6s)
-  "V5:4.3:7.5"   # 10 wide parede final                              (3.2s)
+  "V2:0.2:2.35"  # 2 frontal medium                                  (2.15s)
+  "V1:5.6:7.9"   # 3 wide frontal estavel, sorrindo                  (2.30s)
+  "V3:0.4:2.45"  # 4 close glide no quadro                           (2.05s)
+  "V4:0.2:2.15"  # 5 maos na borda (antes do push-in forte)          (1.95s)
+  "V2:4.1:7.8"   # 6 medium sorrindo push-in                         (3.70s)
+  "V5:1.0:3.2"   # 7 parede, ela admirando                           (2.20s)
+  "V6:0.3:2.0"   # 8 parede lateral                                  (1.70s)
+  "V6:2.8:5.0"   # 9 close parede dolly (quadro inteiro)             (2.20s)
+  "V5:3.0:7.9"   # 10 wide parede final (fecho, hold no produto)     (4.90s)
 )
-ENDCARD_DUR=3.6
 
 inputs=(); filter=""; concat=""; n=0
 declare -a seen=()
@@ -44,14 +45,6 @@ for seg in "${SEGMENTS[@]}"; do
   filter+="[$i:a]atrim=start=$tin:end=$tout,asetpts=PTS-STARTPTS,aresample=48000[a$n];"
   concat+="[v$n][a$n]"; n=$((n+1))
 done
-
-# Endcard branco (placeholder pro logo) + silencio
-white=$(( ${#seen[@]} ))
-sil=$(( white + 1 ))
-inputs+=(-f lavfi -t "$ENDCARD_DUR" -i "color=c=white:s=1080x1920:r=30")
-inputs+=(-f lavfi -t "$ENDCARD_DUR" -i "anullsrc=r=48000:cl=stereo")
-filter+="[$white:v]setsar=1[v$n];[$sil:a]anull[a$n];"
-concat+="[v$n][a$n]"; n=$((n+1))
 
 filter+="${concat}concat=n=$n:v=1:a=1[vc][ac];[ac]loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
 
