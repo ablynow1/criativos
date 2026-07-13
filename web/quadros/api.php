@@ -90,6 +90,7 @@ if ($action === 'state') {
         'cenarios' => jread('cenarios', []),
         'jobs' => jread('jobs', []),
         'defaults' => $CONFIG['defaults'],
+        'worker_token' => $CONFIG['worker_token'], // logado é confiável (igual Cricri)
     ]);
 }
 

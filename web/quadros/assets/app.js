@@ -262,11 +262,16 @@ function viewGaleria() {
 // ---------- AJUSTES ----------
 function viewAjustes() {
   shell(`<h2 class="view-t">Ajustes</h2>
-    <div class="field"><label>Worker</label>
-      <div class="hint">Pra renderizar, o worker precisa estar rodando no seu Mac:<br><code>node tools/quadros-worker.mjs</code><br>com <code>QUADROS_TOKEN</code> no .env (pegue o token no config do servidor).</div>
+    <div class="field"><label>Worker (no seu Mac)</label>
+      <div class="hint">Pra gerar cenários e vídeos, deixe o worker rodando:<br><code>node tools/quadros-worker.mjs</code></div>
+    </div>
+    <div class="field"><label>QUADROS_TOKEN (pro .env)</label>
+      <input type="text" id="tok" readonly value="${esc(S.workerToken || '—')}">
+      <div class="hint">Cole no <code>.env</code> do repo como <code>QUADROS_TOKEN=…</code></div>
     </div>
     <div class="spacer"></div>
     <button class="btn ghost" id="logout">Sair</button>`);
+  const t = $('#tok'); if (t) t.onclick = () => { t.select(); document.execCommand && document.execCommand('copy'); toast('token copiado'); };
   $('#logout').onclick = async () => { await api('logout').catch(() => {}); S.auth = false; renderLogin(); };
 }
 
@@ -284,6 +289,7 @@ async function refresh() {
   S.cenarios = st.cenarios || [];
   S.jobs = st.jobs || [];
   if (st.defaults) S.defaults = st.defaults;
+  if (st.worker_token) S.workerToken = st.worker_token;
   render();
 }
 
