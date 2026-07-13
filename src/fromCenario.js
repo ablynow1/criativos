@@ -38,16 +38,25 @@ function parseArgs(argv) {
   return args;
 }
 
-// Gera 1 keyframe com até 2 retentativas (o modelo às vezes devolve vazio).
+// Gera 1 keyframe com retentativas. Trata a cota do Vertex (429/RESOURCE_
+// EXHAUSTED) com BACKOFF longo — esse limite é por minuto, então esperar 20/40/
+// 60s costuma resolver (retentar na hora não adianta). Erro comum (modelo devolve
+// vazio) espera pouco.
 async function genKeyframe(fn, label) {
   let lastErr;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
     try {
       await fn();
       return;
     } catch (err) {
       lastErr = err;
-      console.error(`  ${label} tentativa ${attempt} falhou: ${String(err.message).slice(0, 160)}`);
+      const is429 = /429|RESOURCE_EXHAUSTED|exhausted|quota/i.test(err.message || '');
+      const waitMs = is429 ? attempt * 20000 : 2000;
+      console.error(`  ${label} tentativa ${attempt} falhou${is429 ? ' (cota 429)' : ''}: ${String(err.message).slice(0, 140)}`);
+      if (attempt < 4) {
+        if (is429) console.error(`  esperando ${waitMs / 1000}s pela cota…`);
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
     }
   }
   throw lastErr;
