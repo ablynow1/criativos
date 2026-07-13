@@ -138,35 +138,40 @@ async function main() {
   }
   if (!okSegments.length) throw new Error('todas as cenas falharam no Veo');
 
-  // 3) montagem (filter_complex dinâmico a partir dos segmentos)
+  // 3) montagem — CORTAR cada trecho num arquivo, depois CONCATENAR (concat
+  //    demuxer). Evita o filter_complex único lendo o mesmo clipe em vários
+  //    pontos de trim, que faz o ffmpeg empacar (medido: 24min+ a 97% CPU num
+  //    grafo com reuso de input; cortes independentes = segundos). Preset
+  //    veryfast (mockup não precisa de x264 slow — ~4s vs ~30s).
   console.log('[3/4] montando o vídeo…');
-  const inputs = [];
-  const seen = [];
-  let filter = '';
-  const labels = [];
-  okSegments.forEach(([clip, tin, tout], n) => {
-    let idx = seen.indexOf(clip);
-    if (idx === -1) {
-      inputs.push('-i', path.join(clipsDir, `${clip}.mp4`));
-      seen.push(clip);
-      idx = seen.length - 1;
-    }
-    filter += `[${idx}:v]trim=start=${tin}:end=${tout},setpts=PTS-STARTPTS,fps=30,scale=1080:1920,setsar=1[v${n}];`;
-    filter += `[${idx}:a]atrim=start=${tin}:end=${tout},asetpts=PTS-STARTPTS,aresample=48000[a${n}];`;
-    labels.push(`[v${n}][a${n}]`);
-  });
-  filter += `${labels.join('')}concat=n=${okSegments.length}:v=1:a=1[vc][ac];`;
-  filter += `[ac]loudnorm=I=-16:TP=-1.5:LRA=11[aout]`;
+  const segDir = path.join(tmpDir, 'seg');
+  await mkdir(segDir, { recursive: true });
+  const listLines = [];
+  for (let n = 0; n < okSegments.length; n += 1) {
+    const [clip, tin, tout] = okSegments[n];
+    const dur = (tout - tin).toFixed(3);
+    const inClip = path.join(clipsDir, `${clip}.mp4`);
+    const segOut = path.join(segDir, `seg${n}.mp4`);
+    // -ss ANTES do -i = seek rápido; corta + escala + reencoda (curto, veryfast)
+    await runFfmpeg([
+      '-ss', String(tin), '-i', inClip, '-t', dur,
+      '-vf', 'fps=30,scale=1080:1920,setsar=1',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart',
+      segOut,
+    ]);
+    listLines.push(`file '${path.resolve(segOut)}'`);
+  }
+  const listFile = path.join(tmpDir, 'list.txt');
+  await writeFile(listFile, listLines.join('\n') + '\n');
 
+  // concat demuxer (sem re-encode de vídeo) + dynaudnorm no áudio (nivela sem
+  // travar — loudnorm single-pass empaca com clipes do Veo)
   const silent = path.join(tmpDir, 'montagem.mp4');
   await runFfmpeg([
-    ...inputs,
-    '-filter_complex', filter,
-    '-map', '[vc]', '-map', '[aout]',
-    '-t', String(duracaoAlvo),
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', '30',
-    '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
-    silent,
+    '-f', 'concat', '-safe', '0', '-i', listFile, '-t', String(duracaoAlvo),
+    '-c:v', 'copy', '-af', 'dynaudnorm', '-c:a', 'aac', '-b:a', '192k',
+    '-movflags', '+faststart', silent,
   ]);
 
   // 4) áudio: por ora usa o som ambiente da montagem (narração+trilha entram
