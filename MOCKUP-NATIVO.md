@@ -128,6 +128,23 @@ Vitor** (custou 6 rodadas; ver histórico em `[[project_mockup_loja_greenscreen]
 
 ---
 
+## 5.5 Moldura por FOTO (biblioteca) e áudio de anúncio
+
+**Moldura real:** suba a foto de uma moldura na biblioteca do estúdio — ela
+entra como **referência img2img em todos os keyframes** do cenário (o mesmo
+padrão que reproduziu o verso kraft no K12) e o Gemini vision gera a descrição
+canônica pro texto do prompt (`src/describeMoldura.js`). K1 = img2img([foto]);
+K2..K6 = img2img([K1, foto]). A moldura é **parte do palco** (baked nos
+keyframes): pra trocar a moldura de um cenário aprovado, use "⟳ moldura"
+(duplica herdando avatar/ambiente canônicos — só a moldura muda).
+
+**Áudio:** o mockup aceita `audio: {narracao, voz, musica, legenda}` —
+narração TTS (Neural2 com timestamps por palavra), trilha Lyria (moods em
+`MUSIC_MOODS`), legenda queimada (caixa/contorno) e mixagem de estúdio via
+`mergeFinal` (ducking sidechain, master -14 LUFS). Sem narração + com trilha =
+mix simples com fade. `formatos: ['9:16','4:5']` exporta também o center-crop
+1080x1350 pro feed.
+
 ## 6. Como adicionar um cenário novo
 
 1. Descreve avatar + ambiente + moldura (texto livre).
