@@ -81,9 +81,15 @@ function runCli(args, onLine) {
   });
 }
 
-// [x/7] cenário · [x/4] mockup → % e rótulo
+// [x/7] cenário · [P i/N K j/6] personas · [x/4] mockup → % e rótulo
 function stageOf(l) {
-  let m = l.match(/\[(\d+)\/7\]/);
+  let m = l.match(/\[P (\d+)\/(\d+) K (\d+)\/6\]/);
+  if (m) {
+    const [, pi, pn, kj] = m.map(Number);
+    const pct = 5 + Math.round(((pi - 1) * 6 + kj) / (pn * 6) * 88);
+    return [pct, `persona ${pi}/${pn} · keyframe ${kj}/6`];
+  }
+  m = l.match(/\[(\d+)\/7\]/);
   if (m) { const x = +m[1]; return [Math.round((x / 7) * 90), x === 1 ? 'interpretando a descrição' : `gerando keyframe ${x - 1}/6`]; }
   m = l.match(/\[(\d+)\/4\]/);
   if (m) {
@@ -114,30 +120,38 @@ async function processCenario(job) {
 
   await progress(job.id, 3, 'iniciando geração do palco');
   let lastSend = 0;
+  const dirs = []; // um por palco gerado (produção em massa emite vários)
   await runCli(['src/fromCenario.js', '--config', cfgPath, '--out', outDir], (line) => {
+    const md = line.match(/^CENARIO_DIR (.+)$/);
+    if (md) dirs.push(md[1].trim());
     const [pct, stage] = stageOf(line);
     const now = Date.now();
     if (pct !== null) { progress(job.id, pct, stage, line); lastSend = now; }
     else if (now - lastSend > 4000) { progress(job.id, undefined, undefined, line); lastSend = now; }
   });
+  if (!dirs.length) dirs.push(outDir); // compat: caminho único antigo
 
-  // sobe os 6 keyframes + o cenario.json pra aprovação
-  await progress(job.id, 95, 'subindo os keyframes pra aprovação');
-  const form = new FormData();
-  form.append('job_id', job.id);
-  form.append('cenario_id', id);
-  const cj = await readFile(path.join(outDir, 'cenario.json'), 'utf-8');
-  form.append('cenario', cj);
-  for (const k of ['K1', 'K2', 'K3', 'K4', 'K5', 'K6']) {
-    const p = path.join(outDir, 'keyframes', `${k}.png`);
-    if (existsSync(p)) {
-      const buf = await readFile(p);
-      // 'keyframes[]' (com colchetes) — senão o PHP só captura o último arquivo
-      form.append('keyframes[]', new Blob([buf], { type: 'image/png' }), `${k}.png`);
+  // sobe cada palco (6 keyframes + cenario.json) pra aprovação
+  await progress(job.id, 95, `subindo ${dirs.length > 1 ? dirs.length + ' palcos' : 'os keyframes'} pra aprovação`);
+  for (const dir of dirs) {
+    const cjPath = path.join(dir, 'cenario.json');
+    if (!existsSync(cjPath)) continue;
+    const form = new FormData();
+    form.append('job_id', job.id);
+    form.append('cenario_id', path.basename(dir));
+    form.append('cenario', await readFile(cjPath, 'utf-8'));
+    for (const k of ['K1', 'K2', 'K3', 'K4', 'K5', 'K6']) {
+      const p = path.join(dir, 'keyframes', `${k}.png`);
+      if (existsSync(p)) {
+        const buf = await readFile(p);
+        // 'keyframes[]' (com colchetes) — senão o PHP só captura o último arquivo
+        form.append('keyframes[]', new Blob([buf], { type: 'image/png' }), `${k}.png`);
+      }
     }
+    await call('worker_add_cenario', { form });
   }
-  await call('worker_done', { form });
-  log(`✅ cenário ${id} gerado — 6 keyframes enviados pra aprovação`);
+  await call('worker_done', { form: (() => { const f = new FormData(); f.append('job_id', job.id); return f; })() });
+  log(`✅ ${dirs.length} palco(s) gerado(s) e enviados pra aprovação`);
 }
 
 async function processMockup(job) {

@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { expandCenario } from './expandCenario.js';
+import { expandPersonas } from './expandPersonas.js';
 import { buildKeyframePrompts } from './cenarios.js';
 import { describeMoldura } from './describeMoldura.js';
 import { generateProductImage } from './generateProductImage.js';
@@ -11,20 +12,26 @@ import { img2img } from './img2img.js';
  * Motor de CENÁRIO (o "palco") do Estúdio de Quadros.
  *
  * Texto livre (avatar/ambiente/moldura) → 6 keyframes em TELA VERDE, prontos
- * pra receber qualquer arte depois (via src/fromMockup.js). K1 é o master
- * (text2img); K2..K6 derivam dele por img2img pra travar a identidade.
+ * pra receber qualquer arte depois (via src/fromMockup.js). K1 é o master;
+ * K2..K6 derivam dele por img2img pra travar a identidade.
  *
- * NÃO gera vídeo — só as imagens-base do palco, pra conferência humana.
- * Ver MOCKUP-NATIVO.md §6.
+ * PRODUÇÃO EM MASSA: `variacoes: N` (2-4) gera N PALCOS DISTINTOS de uma
+ * descrição só — o expandPersonas devolve N personas diversificadas numa
+ * chamada (diversidade garantida) e cada uma vira um cenário completo em
+ * `<out>-pN/`. `diversificar`: 'avatar' | 'ambiente' | 'ambos'.
  *
- * Uso: node src/fromCenario.js --config inputs/cenario.json --out output/quadros/cenarios/<id>
+ * NÃO gera vídeo — só as imagens-base, pra conferência humana. MOCKUP-NATIVO §6.
+ *
+ * Uso: node src/fromCenario.js --config <cfg.json> --out <dir base>
  * Config (web manda): {
  *   id?, nome?,
- *   // canônico (já em EN) OU texto livre pra expandir:
- *   avatar?, ambiente?, moldura?,
- *   avatarText?, ambienteText?, molduraText?, descricao?,
+ *   avatar?, ambiente?, moldura?,          // canônico EN (pula expansão)
+ *   avatarText?, ambienteText?, molduraText?, descricao?,  // texto livre
+ *   molduraImage?,                          // foto da biblioteca (referência)
+ *   variacoes?=1, diversificar?='avatar',
  *   movimento?='medio', temAbertura?=false
  * }
+ * Saída por palco: linha `CENARIO_DIR <dir>` (o worker coleta e sobe cada um).
  */
 function parseArgs(argv) {
   const args = {};
@@ -63,6 +70,69 @@ async function genKeyframe(fn, label) {
   throw lastErr;
 }
 
+/**
+ * Gera UM palco completo (6 keyframes + cenario.json) em `outDir`.
+ * `marker(j)` formata o prefixo de progresso do keyframe j (1-6).
+ */
+async function gerarPalco({ persona, outDir, molduraImg, molduraRef, movimento, temAbertura, marker }) {
+  const kfDir = path.join(outDir, 'keyframes');
+  await mkdir(kfDir, { recursive: true });
+  // a foto da moldura vive dentro de cada palco (reprodutibilidade)
+  let moldLocal = null;
+  if (molduraImg) {
+    moldLocal = path.join(outDir, 'moldura' + path.extname(molduraImg));
+    if (!existsSync(moldLocal)) await copyFile(molduraImg, moldLocal);
+  }
+  const prompts = buildKeyframePrompts({
+    avatar: persona.avatar, ambiente: persona.ambiente, moldura: persona.moldura,
+    molduraRef: !!moldLocal,
+  });
+  const ids = ['K1', 'K2', 'K3', 'K4', 'K5', 'K6'];
+
+  const k1Path = path.join(kfDir, 'K1.png');
+  console.log(`${marker(1)} gerando K1 (master${moldLocal ? ', moldura por referência' : ''})…`);
+  await genKeyframe(
+    () => moldLocal
+      ? img2img({ inputPaths: [moldLocal], prompt: prompts.K1.prompt, outputPath: k1Path, aspectRatio: '9:16' })
+      : generateProductImage({ prompt: prompts.K1.prompt, outputPath: k1Path }),
+    'K1',
+  );
+  if (!existsSync(k1Path)) throw new Error('K1 não foi gerado');
+
+  for (let i = 1; i < ids.length; i += 1) {
+    const id = ids[i];
+    console.log(`${marker(i + 1)} gerando ${id} (img2img de K1${moldLocal ? '+moldura' : ''})…`);
+    await genKeyframe(
+      () => img2img({
+        inputPaths: moldLocal ? [k1Path, moldLocal] : [k1Path],
+        prompt: prompts[id].prompt,
+        outputPath: path.join(kfDir, `${id}.png`),
+        aspectRatio: '9:16',
+      }),
+      id,
+    );
+  }
+
+  const cenario = {
+    id: path.basename(outDir),
+    nome: persona.nome || 'Cenário sem nome',
+    avatar: persona.avatar,
+    ambiente: persona.ambiente,
+    moldura: persona.moldura,
+    movimento: movimento || 'medio',
+    temAbertura: !!temAbertura,
+    molduraFoto: moldLocal ? path.basename(moldLocal) : null,
+    versoKeyframe: null,
+    keyframes: ids.map((id) => `keyframes/${id}.png`),
+    status: 'aguardando_aprovacao',
+    criadoEm: new Date().toISOString(),
+  };
+  await writeFile(path.join(outDir, 'cenario.json'), JSON.stringify(cenario, null, 2));
+  console.log(`OK palco "${cenario.nome}" — ${outDir}`);
+  console.log(`CENARIO_DIR ${outDir}`);
+  return cenario;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.config || !args.out) {
@@ -70,97 +140,76 @@ async function main() {
     process.exit(1);
   }
   const cfg = JSON.parse(await readFile(args.config, 'utf-8'));
-  const outDir = args.out;
-  const kfDir = path.join(outDir, 'keyframes');
-  await mkdir(kfDir, { recursive: true });
+  const outBase = args.out;
+  const variacoes = Math.max(1, Math.min(4, Number(cfg.variacoes) || 1));
 
-  const total = 7; // 1 expand + 6 keyframes
-
-  // moldura por FOTO (biblioteca): a imagem entra como referência img2img em
-  // TODOS os keyframes (padrão kraft-texture→K12) e a visão do Gemini descreve
-  // a moldura pro texto do prompt reforçar o alvo.
+  // moldura por FOTO (biblioteca): referência em TODOS os keyframes + descrição
+  // pela visão (uma vez só, compartilhada entre as variações).
   let molduraImg = null;
   let molduraDesc = null;
   if (cfg.molduraImage && existsSync(cfg.molduraImage)) {
-    molduraImg = path.join(outDir, 'moldura' + path.extname(cfg.molduraImage));
-    await copyFile(cfg.molduraImage, molduraImg);
-    console.log(`[1/${total}] lendo a moldura da foto (visão)…`);
+    molduraImg = cfg.molduraImage;
+    console.log(`[1/7] lendo a moldura da foto (visão)…`);
     const md = await describeMoldura(molduraImg);
     molduraDesc = md.moldura;
     console.log(`  moldura: ${molduraDesc}`);
   }
 
-  // 1) canoniza avatar/ambiente/moldura (expande do texto livre se preciso)
-  let { avatar, ambiente, moldura, nome } = cfg;
-  if (molduraDesc) moldura = molduraDesc;
-  const precisaExpandir = !avatar || !ambiente || !moldura;
-  if (precisaExpandir) {
-    console.log(`[1/${total}] interpretando a descrição (texto → prompt)…`);
-    const ex = await expandCenario({
-      avatarText: cfg.avatarText,
-      ambienteText: cfg.ambienteText,
-      molduraText: molduraDesc || cfg.molduraText,
-      descricao: cfg.descricao,
+  if (variacoes === 1) {
+    // ---- caminho único (original) ----
+    let { avatar, ambiente, moldura, nome } = cfg;
+    if (molduraDesc) moldura = molduraDesc;
+    if (!avatar || !ambiente || !moldura) {
+      console.log(`[1/7] interpretando a descrição (texto → prompt)…`);
+      const ex = await expandCenario({
+        avatarText: cfg.avatarText, ambienteText: cfg.ambienteText,
+        molduraText: molduraDesc || cfg.molduraText, descricao: cfg.descricao,
+      });
+      avatar = avatar || ex.avatar;
+      ambiente = ambiente || ex.ambiente;
+      moldura = moldura || ex.moldura;
+      nome = nome || ex.nome;
+    } else {
+      console.log(`[1/7] cenário já canônico, pulando interpretação`);
+    }
+    await gerarPalco({
+      persona: { avatar, ambiente, moldura, nome: nome || 'Cenário sem nome' },
+      outDir: outBase, molduraImg,
+      movimento: cfg.movimento, temAbertura: cfg.temAbertura,
+      marker: (j) => `[${j + 1}/7]`,
     });
-    avatar = avatar || ex.avatar;
-    ambiente = ambiente || ex.ambiente;
-    moldura = moldura || ex.moldura;
-    nome = nome || ex.nome;
-  } else {
-    console.log(`[1/${total}] cenário já canônico, pulando interpretação`);
+    // compat com o formato antigo
+    console.log(`CENARIO_JSON ${path.join(outBase, 'cenario.json')}`);
+    return;
   }
 
-  const prompts = buildKeyframePrompts({ avatar, ambiente, moldura, molduraRef: !!molduraImg });
-  const ids = ['K1', 'K2', 'K3', 'K4', 'K5', 'K6'];
+  // ---- produção em massa: N personas distintas numa chamada só ----
+  console.log(`[1/7] gerando ${variacoes} personas (${cfg.diversificar || 'avatar'})…`);
+  const personas = await expandPersonas({
+    descricao: cfg.descricao, avatarText: cfg.avatarText,
+    ambienteText: cfg.ambienteText, molduraText: molduraDesc || cfg.molduraText,
+    n: variacoes, diversificar: cfg.diversificar,
+  });
+  personas.forEach((p, i) => console.log(`  P${i + 1}: ${p.nome}`));
+  if (molduraDesc) personas.forEach((p) => { p.moldura = molduraDesc; });
 
-  // 2) K1 = master. Sem foto de moldura: text2img puro. Com foto: img2img
-  //    tendo a moldura como única referência (o modelo cria a cena copiando-a).
-  const k1Path = path.join(kfDir, 'K1.png');
-  console.log(`[2/${total}] gerando K1 (master${molduraImg ? ', moldura por referência' : ', text→imagem'})…`);
-  await genKeyframe(
-    () => molduraImg
-      ? img2img({ inputPaths: [molduraImg], prompt: prompts.K1.prompt, outputPath: k1Path, aspectRatio: '9:16' })
-      : generateProductImage({ prompt: prompts.K1.prompt, outputPath: k1Path }),
-    'K1',
-  );
-  if (!existsSync(k1Path)) throw new Error('K1 não foi gerado');
-
-  // 3..7) K2..K6 = img2img a partir do K1 (mantém identidade/loja); com foto
-  //        de moldura ela segue junto como última referência (fidelidade).
-  for (let i = 1; i < ids.length; i += 1) {
-    const id = ids[i];
-    const dst = path.join(kfDir, `${id}.png`);
-    console.log(`[${i + 2}/${total}] gerando ${id} (img2img de K1${molduraImg ? '+moldura' : ''})…`);
-    await genKeyframe(
-      () =>
-        img2img({
-          inputPaths: molduraImg ? [k1Path, molduraImg] : [k1Path],
-          prompt: prompts[id].prompt,
-          outputPath: dst,
-          aspectRatio: '9:16',
-        }),
-      id,
-    );
+  const falhas = [];
+  for (let i = 0; i < personas.length; i += 1) {
+    const outDir = `${outBase}-p${i + 1}`;
+    try {
+      await gerarPalco({
+        persona: personas[i], outDir, molduraImg,
+        movimento: cfg.movimento, temAbertura: cfg.temAbertura,
+        marker: (j) => `[P ${i + 1}/${personas.length} K ${j}/6]`,
+      });
+    } catch (e) {
+      falhas.push(personas[i].nome);
+      console.error(`  persona ${i + 1} falhou (seguindo): ${String(e.message).slice(0, 140)}`);
+    }
   }
-
-  // grava o manifesto do cenário (fonte de verdade do palco)
-  const cenario = {
-    id: cfg.id || path.basename(outDir),
-    nome: nome || 'Cenário sem nome',
-    avatar,
-    ambiente,
-    moldura,
-    movimento: cfg.movimento || 'medio',
-    temAbertura: !!cfg.temAbertura,
-    molduraFoto: molduraImg ? path.basename(molduraImg) : null,
-    versoKeyframe: cfg.versoKeyframe || null,
-    keyframes: ids.map((id) => `keyframes/${id}.png`),
-    status: 'aguardando_aprovacao',
-    criadoEm: new Date().toISOString(),
-  };
-  await writeFile(path.join(outDir, 'cenario.json'), JSON.stringify(cenario, null, 2));
-  console.log(`OK cenário "${cenario.nome}" — 6 keyframes em ${kfDir}`);
-  console.log(`CENARIO_JSON ${path.join(outDir, 'cenario.json')}`);
+  if (falhas.length === personas.length) throw new Error('todas as personas falharam');
+  if (falhas.length) console.log(`ATENÇÃO: ${falhas.length} persona(s) falharam: ${falhas.join(', ')}`);
+  console.log(`OK ${personas.length - falhas.length}/${personas.length} palcos gerados`);
 }
 
 main().catch((err) => {

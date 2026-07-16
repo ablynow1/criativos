@@ -7,6 +7,7 @@ import { generateVideoClip } from './generateVideoClip.js';
 import { generateNarration } from './generateNarration.js';
 import { generateSubtitles } from './generateSubtitles.js';
 import { generateMusic } from './musicGen.js';
+import { variarNarracao } from './variarNarracao.js';
 import { mergeFinal } from './mergeFinal.js';
 import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
 
@@ -199,9 +200,21 @@ async function main() {
   }
 
   if (temNarracao) {
+    let textoNarracao = String(audio.narracao).trim();
+    // variação automática de copy (lote A/B): cada job reescreve a base com um
+    // gancho diferente (temperatura alta ⇒ jobs independentes divergem sozinhos)
+    if (audio.variar) {
+      try {
+        const v = await variarNarracao({ base: textoNarracao, duracaoAlvo });
+        textoNarracao = v.narracao;
+        console.log(`  copy variada (ângulo: ${v.angulo}): "${textoNarracao.slice(0, 70)}…"`);
+      } catch (e) {
+        console.error(`  variação de copy falhou (usando a base): ${String(e.message).slice(0, 100)}`);
+      }
+    }
     console.log('  narração (TTS)…');
     const narr = await generateNarration({
-      text: String(audio.narracao).trim(),
+      text: textoNarracao,
       outputAudioPath: path.join(tmpDir, 'narracao.mp3'),
       voiceName: audio.voz || undefined,
       direcao: audio.direcaoVoz || undefined,

@@ -6,6 +6,7 @@
 
 declare(strict_types=1);
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
+ini_set('display_errors', '0'); // warning impresso corrompe o JSON da resposta
 header('Content-Type: application/json; charset=utf-8');
 
 define('DATA', __DIR__ . '/data');
@@ -163,6 +164,8 @@ if ($action === 'queue_cenario') {
             'molduraUrl' => $molduraUrl, 'molduraNome' => $molduraNome,
             'movimento' => $b['movimento'] ?? 'medio',
             'temAbertura' => !empty($b['temAbertura']),
+            'variacoes' => max(1, min(4, (int)($b['variacoes'] ?? 1))),
+            'diversificar' => in_array($b['diversificar'] ?? '', ['avatar', 'ambiente', 'ambos']) ? $b['diversificar'] : 'avatar',
         ],
         'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
         'result' => null, 'error' => null, 'created_at' => now(), 'updated_at' => now(),
@@ -196,31 +199,53 @@ if ($action === 'delete_cenario') {
 if ($action === 'queue_mockup') {
     require_login(); require_csrf();
     $b = body();
-    if (empty($b['cenarioId'])) fail('escolha um cenário');
-    // LOTE: aceita arteUrls[] (N artes -> N jobs) ou arteUrl único
+    // LOTE de artes: arteUrls[] (N artes) ou arteUrl único
     $artes = [];
     if (!empty($b['arteUrls']) && is_array($b['arteUrls'])) $artes = array_values(array_filter($b['arteUrls']));
     elseif (!empty($b['arteUrl'])) $artes = [$b['arteUrl']];
     if (!$artes) fail('suba a arte do quadro');
     if (count($artes) > 10) fail('máximo 10 artes por lote');
-    // o cenário precisa estar aprovado
+    // CENÁRIOS: cenarioIds[] (multi) ou cenarioId único — todos aprovados
+    $ids = [];
+    if (!empty($b['cenarioIds']) && is_array($b['cenarioIds'])) $ids = array_values(array_filter($b['cenarioIds']));
+    elseif (!empty($b['cenarioId'])) $ids = [$b['cenarioId']];
+    if (!$ids) fail('escolha ao menos um cenário');
     $cenarios = jread('cenarios', []);
-    $cen = null;
-    foreach ($cenarios as $c) if ($c['id'] === $b['cenarioId']) $cen = $c;
-    if (!$cen) fail('cenário não encontrado', 404);
-    if (($cen['status'] ?? '') !== 'aprovado') fail('aprove o cenário antes de usar');
+    $pool = [];
+    foreach ($ids as $cid) {
+        $found = null;
+        foreach ($cenarios as $c) if ($c['id'] === $cid) $found = $c;
+        if (!$found) fail("cenário $cid não encontrado", 404);
+        if (($found['status'] ?? '') !== 'aprovado') fail("aprove o cenário \"{$found['nome']}\" antes de usar");
+        $pool[] = $found;
+    }
+    // MODO da matriz de produção:
+    //   um      — todas as artes no primeiro cenário (comportamento clássico)
+    //   sortear — cada arte pega um cenário ALEATÓRIO do pool
+    //   matriz  — todas as artes × todos os cenários (produção em massa)
+    $modo = in_array($b['modo'] ?? '', ['um', 'sortear', 'matriz']) ? $b['modo'] : 'um';
+    $combos = [];
+    if ($modo === 'matriz') {
+        foreach ($artes as $arte) foreach ($pool as $cen) $combos[] = [$arte, $cen];
+    } elseif ($modo === 'sortear') {
+        foreach ($artes as $arte) $combos[] = [$arte, $pool[random_int(0, count($pool) - 1)]];
+    } else {
+        foreach ($artes as $arte) $combos[] = [$arte, $pool[0]];
+    }
+    if (count($combos) > 20) fail('máximo 20 vídeos por lote (' . count($combos) . ' na conta) — reduza artes ou cenários');
+
     $jobs = jread('jobs', []);
     $criados = [];
-    $n = count($artes);
-    foreach ($artes as $i => $arte) {
-        $sufixo = $n > 1 ? (' · arte ' . ($i + 1) . '/' . $n) : '';
+    $n = count($combos);
+    foreach ($combos as $i => [$arte, $cen]) {
+        $sufixo = $n > 1 ? (' · ' . ($i + 1) . '/' . $n) : '';
         $job = [
             'id' => rid('job_'),
             'tipo' => 'mockup',
-            'nome' => ($b['nome'] ?: ($cen['nome'] . ' · mockup')) . $sufixo,
+            'nome' => (($b['nome'] ?? '') ?: ($cen['nome'] . ' · mockup')) . $sufixo,
             'snapshot' => [
                 'tipo' => 'mockup',
-                'cenarioId' => $b['cenarioId'],
+                'cenarioId' => $cen['id'],
                 'arteUrl' => $arte,
                 'movimento' => $b['movimento'] ?? 'medio',
                 'duracaoAlvo' => (int)($b['duracaoAlvo'] ?? 25),
@@ -317,41 +342,54 @@ if ($action === 'worker_progress') {
     jwrite('jobs', $jobs);
     out(['ok' => true]);
 }
-// worker_done: recebe (a) cenário = cenario.json + 6 keyframes, ou (b) mockup = mp4
+// registra UM palco (cenario.json + 6 keyframes) — usado 1x por palco; a
+// produção em massa chama várias vezes no mesmo job antes do worker_done.
+function register_cenario(): void {
+    $cid = preg_replace('/[^a-z0-9\-_]/', '', $_POST['cenario_id'] ?? '');
+    if ($cid === '' || !isset($_FILES['keyframes'])) fail('cenario_id/keyframes ausentes');
+    $dir = CENMEDIA . '/' . $cid;
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    $thumbs = [];
+    $files = $_FILES['keyframes'];
+    $n = is_array($files['name']) ? count($files['name']) : 0;
+    for ($i = 0; $i < $n; $i++) {
+        $fn = preg_replace('/[^A-Za-z0-9._-]/', '', $files['name'][$i]);
+        if (move_uploaded_file($files['tmp_name'][$i], "$dir/$fn")) {
+            $thumbs[] = "media/cenarios/$cid/$fn";
+        }
+    }
+    $meta = json_decode((string)($_POST['cenario'] ?? '{}'), true) ?: [];
+    $cenarios = jread('cenarios', []);
+    $rec = [
+        'id' => $cid,
+        'nome' => $meta['nome'] ?? 'Cenário',
+        'avatar' => $meta['avatar'] ?? '', 'ambiente' => $meta['ambiente'] ?? '',
+        'moldura' => $meta['moldura'] ?? '', 'movimento' => $meta['movimento'] ?? 'medio',
+        'temAbertura' => !empty($meta['temAbertura']),
+        'thumbs' => $thumbs, 'status' => 'aguardando_aprovacao',
+        'created_at' => now(), 'updated_at' => now(),
+    ];
+    // upsert por id
+    $cenarios = array_values(array_filter($cenarios, fn($c) => $c['id'] !== $cid));
+    array_unshift($cenarios, $rec);
+    jwrite('cenarios', $cenarios);
+}
+
+if ($action === 'worker_add_cenario') {
+    require_worker();
+    register_cenario();
+    out(['ok' => true]);
+}
+
+// worker_done: recebe (a) cenário = cenario.json + 6 keyframes, ou (b) mockup = mp4,
+// ou (c) só job_id (produção em massa — os palcos já subiram via worker_add_cenario)
 if ($action === 'worker_done') {
     require_worker();
     $job_id = $_POST['job_id'] ?? '';
     $jobs = jread('jobs', []);
 
     if (!empty($_POST['cenario_id']) && isset($_FILES['keyframes'])) {
-        // salva os keyframes em media/cenarios/<id>/ e registra o cenário
-        $cid = preg_replace('/[^a-z0-9\-_]/', '', $_POST['cenario_id']);
-        $dir = CENMEDIA . '/' . $cid;
-        if (!is_dir($dir)) @mkdir($dir, 0775, true);
-        $thumbs = [];
-        $files = $_FILES['keyframes'];
-        $n = is_array($files['name']) ? count($files['name']) : 0;
-        for ($i = 0; $i < $n; $i++) {
-            $fn = preg_replace('/[^A-Za-z0-9._-]/', '', $files['name'][$i]);
-            if (move_uploaded_file($files['tmp_name'][$i], "$dir/$fn")) {
-                $thumbs[] = "media/cenarios/$cid/$fn";
-            }
-        }
-        $meta = json_decode((string)($_POST['cenario'] ?? '{}'), true) ?: [];
-        $cenarios = jread('cenarios', []);
-        $rec = [
-            'id' => $cid,
-            'nome' => $meta['nome'] ?? 'Cenário',
-            'avatar' => $meta['avatar'] ?? '', 'ambiente' => $meta['ambiente'] ?? '',
-            'moldura' => $meta['moldura'] ?? '', 'movimento' => $meta['movimento'] ?? 'medio',
-            'temAbertura' => !empty($meta['temAbertura']),
-            'thumbs' => $thumbs, 'status' => 'aguardando_aprovacao',
-            'created_at' => now(), 'updated_at' => now(),
-        ];
-        // upsert por id
-        $cenarios = array_values(array_filter($cenarios, fn($c) => $c['id'] !== $cid));
-        array_unshift($cenarios, $rec);
-        jwrite('cenarios', $cenarios);
+        register_cenario();
     } else if (isset($_FILES['video'])) {
         $name = 'mockup_' . $job_id . '.mp4';
         move_uploaded_file($_FILES['video']['tmp_name'], MEDIA . '/' . $name);
