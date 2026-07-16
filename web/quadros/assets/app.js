@@ -7,12 +7,21 @@ const app = $('#app');
 
 const S = {
   auth: false, tab: 'cenarios', screen: null,
-  cenarios: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
-  // form do mockup
-  mk: { cenarioId: null, arteUrl: null, artePrev: null, movimento: 'medio', duracaoAlvo: 25, abertura: false },
-  // form do cenário
-  cn: { descricao: '', avatarText: '', ambienteText: '', molduraText: '', nome: '', movimento: 'medio', temAbertura: false },
+  cenarios: [], molduras: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
+  // form do mockup (artes = lote: [{url, prev}])
+  mk: { cenarioId: null, artes: [], movimento: 'medio', duracaoAlvo: 25, abertura: false,
+    narracao: '', voz: 'pt-BR-Neural2-C', musica: 'nenhuma', legenda: 'caixa', fmt45: false },
+  // form do cenário (molduraId = da biblioteca; duplicarDe = herda avatar/ambiente)
+  cn: { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
+    nome: '', movimento: 'medio', temAbertura: false, duplicarDe: null, duplicarNome: '' },
 };
+
+const VOZES = [
+  { id: 'pt-BR-Neural2-C', label: 'Feminina' },
+  { id: 'pt-BR-Wavenet-B', label: 'Masculina' },
+];
+const TRILHAS = ['nenhuma', 'emocional', 'energetica', 'epica', 'suave', 'misteriosa'];
+const LEGENDAS = [['nenhuma', 'Sem legenda'], ['caixa', 'Caixa preta'], ['contorno', 'Contorno']];
 
 const IC = {
   cenarios: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
@@ -85,7 +94,7 @@ function viewCenarios() {
         <p class="desc">${esc(c.ambiente || '')}</p>
       </div>
       <div class="cactions">
-        ${wait ? `<button class="btn sm" data-approve="${esc(c.id)}">Ver / aprovar</button>` : `<button class="btn sm" data-use="${esc(c.id)}">Usar</button>`}
+        ${wait ? `<button class="btn sm" data-approve="${esc(c.id)}">Ver / aprovar</button>` : `<button class="btn sm" data-use="${esc(c.id)}">Usar</button><button class="btn sm ghost" data-dup="${esc(c.id)}" title="mesmo palco, outra moldura">⟳ moldura</button>`}
         <button class="btn sm danger" data-del="${esc(c.id)}">✕</button>
       </div>
     </div>`;
@@ -93,13 +102,24 @@ function viewCenarios() {
   shell(`
     <h2 class="view-t">Cenários</h2>
     <p class="view-sub">O palco: modelo + ambiente + moldura. Monta uma vez, reusa sempre.</p>
-    <button class="btn" id="new-cen">+ Novo cenário</button>
+    <div class="btnrow">
+      <button class="btn" id="new-cen">+ Novo cenário</button>
+      <button class="btn ghost" id="go-mold">🖼 Molduras${S.molduras.length ? ` (${S.molduras.length})` : ''}</button>
+    </div>
     <div class="spacer"></div>
     ${S.cenarios.length ? `<div class="grid">${cards}</div>` : '<div class="empty">Nenhum cenário ainda.<br>Crie o primeiro palco acima.</div>'}
   `);
-  $('#new-cen').onclick = () => { S.screen = 'novo-cenario'; render(); };
+  $('#new-cen').onclick = () => { S.cn.duplicarDe = null; S.cn.duplicarNome = ''; S.screen = 'novo-cenario'; render(); };
+  $('#go-mold').onclick = () => { S.screen = 'molduras'; render(); };
   app.querySelectorAll('[data-approve]').forEach((b) => b.onclick = () => { S.screen = 'aprovar:' + b.dataset.approve; render(); });
   app.querySelectorAll('[data-use]').forEach((b) => b.onclick = () => { S.mk.cenarioId = b.dataset.use; S.tab = 'novo'; S.screen = null; render(); });
+  app.querySelectorAll('[data-dup]').forEach((b) => b.onclick = () => {
+    const c = S.cenarios.find((x) => x.id === b.dataset.dup);
+    if (!c) return;
+    S.cn = { ...S.cn, descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
+      nome: '', movimento: c.movimento || 'medio', temAbertura: false, duplicarDe: c.id, duplicarNome: c.nome };
+    S.screen = 'novo-cenario'; render();
+  });
   app.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
     if (!confirm('Apagar este cenário?')) return;
     try { await api('delete_cenario', { body: { id: b.dataset.del } }); await refresh(); toast('cenário apagado'); }
@@ -107,40 +127,110 @@ function viewCenarios() {
   });
 }
 
+// ---------- MOLDURAS (biblioteca) ----------
+function viewMolduras() {
+  const cards = S.molduras.map((m) => `<div class="card">
+    <div class="mold-ph"><img src="${esc(m.url)}" alt="${esc(m.nome)}"></div>
+    <div class="cbody"><h3>${esc(m.nome)}</h3></div>
+    <div class="cactions">
+      <button class="btn sm" data-usem="${esc(m.id)}">Usar num cenário</button>
+      <button class="btn sm danger" data-delm="${esc(m.id)}">✕</button>
+    </div>
+  </div>`).join('');
+  shell(`
+    <h2 class="view-t">Molduras</h2>
+    <p class="view-sub">Suba a foto de uma moldura real — ela vira referência e o palco é gerado com ela idêntica.</p>
+    <button class="btn" id="up-mold">+ Subir foto de moldura</button>
+    <div class="spacer"></div>
+    ${S.molduras.length ? `<div class="grid">${cards}</div>` : '<div class="empty">Biblioteca vazia.<br>Suba a primeira moldura acima.</div>'}
+    <div class="spacer"></div>
+    <button class="btn ghost" id="mold-back">Voltar</button>
+  `);
+  $('#mold-back').onclick = () => { S.screen = null; render(); };
+  $('#up-mold').onclick = () => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp';
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      const fd = new FormData(); fd.append('file', f);
+      try {
+        toast('subindo a moldura…');
+        const r = await api('upload_image', { form: fd });
+        const nome = prompt('Nome da moldura (ex: Dourada ornamentada):') || 'Moldura';
+        await api('save_moldura', { body: { nome, url: r.url } });
+        await refresh(); S.screen = 'molduras'; render();
+        toast('moldura salva na biblioteca ✓');
+      } catch (e) { toast(e.message, true); }
+    };
+    inp.click();
+  };
+  app.querySelectorAll('[data-usem]').forEach((b) => b.onclick = () => {
+    S.cn.molduraId = b.dataset.usem; S.cn.molduraText = '';
+    S.screen = 'novo-cenario'; render();
+  });
+  app.querySelectorAll('[data-delm]').forEach((b) => b.onclick = async () => {
+    if (!confirm('Apagar esta moldura da biblioteca?')) return;
+    try { await api('delete_moldura', { body: { id: b.dataset.delm } }); await refresh(); S.screen = 'molduras'; render(); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
 // ---------- NOVO CENÁRIO (form) ----------
 function viewNovoCenario() {
   const c = S.cn;
+  const dup = !!c.duplicarDe;
   const moveChips = ['calmo', 'medio', 'dinamico'].map((m) =>
     `<button class="chip ${c.movimento === m ? 'on' : ''}" data-move="${m}">${m}</button>`).join('');
+  const moldChips = S.molduras.map((m) =>
+    `<button class="chip ${c.molduraId === m.id ? 'on' : ''}" data-mold="${esc(m.id)}">${esc(m.nome)}</button>`).join('')
+    + `<button class="chip ${!c.molduraId ? 'on' : ''}" data-mold="">texto livre</button>`;
   shell(`
-    <h2 class="view-t">Novo cenário</h2>
-    <p class="view-sub">Descreva em texto livre — eu viro o prompt técnico e gero os 6 quadros-base pra você aprovar.</p>
+    <h2 class="view-t">${dup ? 'Trocar a moldura' : 'Novo cenário'}</h2>
+    <p class="view-sub">${dup
+      ? `Mesmo palco de <b>${esc(c.duplicarNome)}</b> (mesma modelo, mesmo lugar) — só a moldura muda. Um cenário novo é gerado pra você aprovar.`
+      : 'Descreva em texto livre — eu viro o prompt técnico e gero os 6 quadros-base pra você aprovar.'}</p>
+    ${dup ? '' : `
     <div class="field"><label>Descrição da cena</label>
-      <textarea id="f-desc" placeholder="ex: uma ruiva de vestido preto numa galeria minimalista branca, luz de dia, moldura dourada">${esc(c.descricao)}</textarea>
+      <textarea id="f-desc" placeholder="ex: uma ruiva de vestido preto numa galeria minimalista branca, luz de dia">${esc(c.descricao)}</textarea>
       <div class="hint">Pode jogar tudo aqui, ou detalhar nos campos abaixo.</div>
     </div>
     <div class="field"><label>Avatar (opcional)</label><input type="text" id="f-av" placeholder="quem apresenta o quadro" value="${esc(c.avatarText)}"></div>
-    <div class="field"><label>Ambiente (opcional)</label><input type="text" id="f-am" placeholder="onde é a cena" value="${esc(c.ambienteText)}"></div>
-    <div class="field"><label>Moldura (opcional)</label><input type="text" id="f-mo" placeholder="ex: preta fina, dourada, madeira clara" value="${esc(c.molduraText)}"></div>
+    <div class="field"><label>Ambiente (opcional)</label><input type="text" id="f-am" placeholder="onde é a cena" value="${esc(c.ambienteText)}"></div>`}
+    <div class="field"><label>Moldura</label>
+      <div class="chips" style="margin-bottom:8px">${moldChips}</div>
+      ${c.molduraId
+        ? `<div class="hint">A foto da biblioteca entra como referência — a moldura sai idêntica à real.</div>`
+        : `<input type="text" id="f-mo" placeholder="ex: preta fina fosca, dourada ornamentada, madeira clara" value="${esc(c.molduraText)}">`}
+      <div class="hint" style="margin-top:6px">Quer usar uma moldura sua? <a href="#" id="go-mold2">Suba a foto na biblioteca</a>.</div>
+    </div>
     <div class="field"><label>Movimento das cenas</label><div class="chips">${moveChips}</div></div>
-    <div class="row"><span class="rl">Preparar abertura com reveal do verso</span><button class="tg ${c.temAbertura ? 'on' : ''}" id="f-ab"></button></div>
-    <div class="hint" style="margin:6px 0 16px">O reveal do verso é gerado depois, sob demanda. Deixe desligado por ora.</div>
+    ${dup ? '' : `<div class="row"><span class="rl">Preparar abertura com reveal do verso</span><button class="tg ${c.temAbertura ? 'on' : ''}" id="f-ab"></button></div>
+    <div class="hint" style="margin:6px 0 16px">O reveal do verso é gerado depois, sob demanda. Deixe desligado por ora.</div>`}
     <button class="btn" id="cen-go">Gerar quadros-base</button>
     <div class="spacer"></div>
     <button class="btn ghost" id="cen-back">Voltar</button>
   `);
-  $('#f-desc').oninput = (e) => c.descricao = e.target.value;
-  $('#f-av').oninput = (e) => c.avatarText = e.target.value;
-  $('#f-am').oninput = (e) => c.ambienteText = e.target.value;
-  $('#f-mo').oninput = (e) => c.molduraText = e.target.value;
+  const bind = (sel, fn) => { const el = $(sel); if (el) el.oninput = fn; };
+  bind('#f-desc', (e) => c.descricao = e.target.value);
+  bind('#f-av', (e) => c.avatarText = e.target.value);
+  bind('#f-am', (e) => c.ambienteText = e.target.value);
+  bind('#f-mo', (e) => c.molduraText = e.target.value);
   app.querySelectorAll('[data-move]').forEach((b) => b.onclick = () => { c.movimento = b.dataset.move; render(); });
-  $('#f-ab').onclick = () => { c.temAbertura = !c.temAbertura; render(); };
+  app.querySelectorAll('[data-mold]').forEach((b) => b.onclick = () => { c.molduraId = b.dataset.mold || null; render(); });
+  $('#go-mold2').onclick = (e) => { e.preventDefault(); S.screen = 'molduras'; render(); };
+  const ab = $('#f-ab'); if (ab) ab.onclick = () => { c.temAbertura = !c.temAbertura; render(); };
   $('#cen-back').onclick = () => { S.screen = null; render(); };
   $('#cen-go').onclick = async () => {
-    if (!c.descricao.trim() && (!c.avatarText.trim() || !c.ambienteText.trim())) return toast('descreva ao menos avatar e ambiente', true);
+    if (!dup && !c.descricao.trim() && (!c.avatarText.trim() || !c.ambienteText.trim())) return toast('descreva ao menos avatar e ambiente', true);
+    if (dup && !c.molduraId && !c.molduraText.trim()) return toast('escolha a moldura nova', true);
     try {
-      await api('queue_cenario', { body: { ...c, nome: c.nome || (c.ambienteText || c.descricao).slice(0, 30) } });
-      S.cn = { descricao: '', avatarText: '', ambienteText: '', molduraText: '', nome: '', movimento: 'medio', temAbertura: false };
+      const moldNome = c.molduraId ? (S.molduras.find((m) => m.id === c.molduraId)?.nome || '') : c.molduraText;
+      const nome = dup
+        ? `${c.duplicarNome.split('·')[0].trim()} · ${moldNome.slice(0, 18)}`
+        : (c.nome || (c.ambienteText || c.descricao).slice(0, 30));
+      await api('queue_cenario', { body: { ...c, nome } });
+      S.cn = { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
+        nome: '', movimento: 'medio', temAbertura: false, duplicarDe: null, duplicarNome: '' };
       S.screen = null; S.tab = 'fila'; await refresh();
       toast('gerando o palco — acompanhe na Fila');
     } catch (e) { toast(e.message, true); }
@@ -178,47 +268,79 @@ function viewNovo() {
   const cenChips = aprovados.map((c) => `<button class="chip ${m.cenarioId === c.id ? 'on' : ''}" data-cen="${esc(c.id)}">${esc(c.nome)}</button>`).join('');
   const moveChips = ['calmo', 'medio', 'dinamico'].map((x) => `<button class="chip ${m.movimento === x ? 'on' : ''}" data-move="${x}">${x}</button>`).join('');
   const durChips = [15, 25, 30].map((x) => `<button class="chip ${m.duracaoAlvo === x ? 'on' : ''}" data-dur="${x}">${x}s</button>`).join('');
+  const vozChips = VOZES.map((v) => `<button class="chip ${m.voz === v.id ? 'on' : ''}" data-voz="${v.id}">${v.label}</button>`).join('');
+  const triChips = TRILHAS.map((t) => `<button class="chip ${m.musica === t ? 'on' : ''}" data-tri="${t}">${t}</button>`).join('');
+  const legChips = LEGENDAS.map(([id, lb]) => `<button class="chip ${m.legenda === id ? 'on' : ''}" data-leg="${id}">${lb}</button>`).join('');
+  const artesHtml = m.artes.map((a, i) => `<div class="arte-th"><img src="${esc(a.prev)}" alt=""><button class="arte-x" data-delarte="${i}">✕</button></div>`).join('');
   const cen = aprovados.find((c) => c.id === m.cenarioId);
+  const temNarr = !!m.narracao.trim();
   shell(`
     <h2 class="view-t">Novo mockup</h2>
-    <p class="view-sub">Escolha o palco, suba a arte e ajuste. Sai o vídeo nativo de ${m.duracaoAlvo}s.</p>
+    <p class="view-sub">Escolha o palco, suba 1 ou mais artes e ajuste. ${m.artes.length > 1 ? `<b>${m.artes.length} vídeos</b> entram na fila (um por arte).` : `Sai o vídeo nativo de ${m.duracaoAlvo}s.`}</p>
     <div class="field"><label>Cenário</label><div class="chips">${cenChips}</div></div>
-    <div class="field"><label>Arte do quadro</label>
-      <div class="drop ${m.artePrev ? 'has' : ''}" id="drop">
-        ${m.artePrev ? `<img src="${esc(m.artePrev)}" alt=""><div class="t">trocar a arte</div>` : '<div class="t">toque pra subir a imagem</div><div class="hint">png · jpg · webp</div>'}
+    <div class="field"><label>Arte${m.artes.length > 1 ? 's' : ''} do quadro ${m.artes.length ? `· ${m.artes.length}` : ''}</label>
+      <div class="artes-row">${artesHtml}
+        <div class="drop mini" id="drop"><div class="t">${m.artes.length ? '+ mais' : 'subir'}</div></div>
       </div>
+      <div class="hint">png · jpg · webp — pode selecionar várias de uma vez (lote de teste A/B)</div>
     </div>
     <div class="field"><label>Movimento</label><div class="chips">${moveChips}</div></div>
     <div class="field"><label>Duração</label><div class="chips">${durChips}</div></div>
+    <div class="field"><label>Narração (opcional — vira voz + legenda no vídeo)</label>
+      <textarea id="mk-narr" placeholder="ex: Transforme a foto que você ama numa obra de arte de verdade…">${esc(m.narracao)}</textarea>
+      <div class="hint">~${m.duracaoAlvo === 15 ? '30-40' : '55-70'} palavras cabem em ${m.duracaoAlvo}s. Vazio = só som ambiente.</div>
+    </div>
+    ${temNarr ? `<div class="field"><label>Voz</label><div class="chips">${vozChips}</div></div>
+    <div class="field"><label>Legenda queimada</label><div class="chips">${legChips}</div></div>` : ''}
+    <div class="field"><label>Trilha musical</label><div class="chips">${triChips}</div></div>
+    <div class="row"><span class="rl">Exportar também 4:5 (feed do Meta)</span><button class="tg ${m.fmt45 ? 'on' : ''}" id="mk-45"></button></div>
     ${cen && cen.temAbertura ? `<div class="row"><span class="rl">Abrir com reveal do verso</span><button class="tg ${m.abertura ? 'on' : ''}" id="mk-ab"></button></div>` : ''}
     <div class="spacer"></div>
-    <button class="btn" id="mk-go" ${m.arteUrl ? '' : 'disabled'}>Renderizar mockup</button>
+    <button class="btn" id="mk-go" ${m.artes.length ? '' : 'disabled'}>Renderizar ${m.artes.length > 1 ? m.artes.length + ' mockups' : 'mockup'}</button>
   `);
   app.querySelectorAll('[data-cen]').forEach((b) => b.onclick = () => { m.cenarioId = b.dataset.cen; render(); });
   app.querySelectorAll('[data-move]').forEach((b) => b.onclick = () => { m.movimento = b.dataset.move; render(); });
   app.querySelectorAll('[data-dur]').forEach((b) => b.onclick = () => { m.duracaoAlvo = +b.dataset.dur; render(); });
+  app.querySelectorAll('[data-voz]').forEach((b) => b.onclick = () => { m.voz = b.dataset.voz; render(); });
+  app.querySelectorAll('[data-tri]').forEach((b) => b.onclick = () => { m.musica = b.dataset.tri; render(); });
+  app.querySelectorAll('[data-leg]').forEach((b) => b.onclick = () => { m.legenda = b.dataset.leg; render(); });
+  app.querySelectorAll('[data-delarte]').forEach((b) => b.onclick = () => { m.artes.splice(+b.dataset.delarte, 1); render(); });
+  const narr = $('#mk-narr'); if (narr) narr.oninput = (e) => { const was = temNarr; m.narracao = e.target.value; if (was !== !!m.narracao.trim()) render(); };
+  const t45 = $('#mk-45'); if (t45) t45.onclick = () => { m.fmt45 = !m.fmt45; render(); };
   const ab = $('#mk-ab'); if (ab) ab.onclick = () => { m.abertura = !m.abertura; render(); };
-  $('#drop').onclick = pickArt;
+  $('#drop').onclick = pickArtes;
   $('#mk-go').onclick = async () => {
     try {
-      await api('queue_mockup', { body: { cenarioId: m.cenarioId, arteUrl: m.arteUrl, nome: '', movimento: m.movimento, duracaoAlvo: m.duracaoAlvo, abertura: m.abertura } });
-      S.tab = 'fila'; await refresh(); toast('renderizando — acompanhe na Fila');
+      await api('queue_mockup', { body: {
+        cenarioId: m.cenarioId,
+        arteUrls: m.artes.map((a) => a.url),
+        nome: '', movimento: m.movimento, duracaoAlvo: m.duracaoAlvo, abertura: m.abertura,
+        audio: { narracao: m.narracao.trim(), voz: m.voz, musica: m.musica, legenda: m.legenda },
+        formatos: m.fmt45 ? ['9:16', '4:5'] : ['9:16'],
+      } });
+      const n = m.artes.length;
+      m.artes = [];
+      S.tab = 'fila'; await refresh();
+      toast(n > 1 ? `${n} mockups na fila` : 'renderizando — acompanhe na Fila');
     } catch (e) { toast(e.message, true); }
   };
 }
 
-function pickArt() {
+function pickArtes() {
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp';
+  inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp'; inp.multiple = true;
   inp.onchange = async () => {
-    const f = inp.files[0]; if (!f) return;
-    const fd = new FormData(); fd.append('file', f);
-    try {
-      toast('subindo a arte…');
-      const r = await api('upload_image', { form: fd });
-      S.mk.arteUrl = r.url; S.mk.artePrev = URL.createObjectURL(f);
-      render();
-    } catch (e) { toast(e.message, true); }
+    const files = [...inp.files].slice(0, 10 - S.mk.artes.length);
+    if (!files.length) return;
+    toast(`subindo ${files.length} arte${files.length > 1 ? 's' : ''}…`);
+    for (const f of files) {
+      const fd = new FormData(); fd.append('file', f);
+      try {
+        const r = await api('upload_image', { form: fd });
+        S.mk.artes.push({ url: r.url, prev: URL.createObjectURL(f) });
+      } catch (e) { toast(`${f.name}: ${e.message}`, true); }
+    }
+    render();
   };
   inp.click();
 }
@@ -254,8 +376,15 @@ function viewFila() {
 // ---------- GALERIA ----------
 function viewGaleria() {
   const done = S.jobs.filter((j) => j.tipo === 'mockup' && j.status === 'done' && j.video);
-  const cells = done.map((j) => `<div><video src="${esc(j.video)}" controls playsinline preload="metadata"></video><div class="gcap">${esc(j.nome)}</div></div>`).join('');
-  shell(`<h2 class="view-t">Galeria</h2><p class="view-sub">Seus mockups prontos.</p>
+  const cells = done.map((j) => `<div>
+    <video src="${esc(j.video)}" controls playsinline preload="metadata"></video>
+    <div class="gcap">${esc(j.nome)}</div>
+    <div class="gdl">
+      <a href="${esc(j.video)}" download>⬇ 9:16</a>
+      ${j.video45 ? `<a href="${esc(j.video45)}" download>⬇ 4:5 feed</a>` : ''}
+    </div>
+  </div>`).join('');
+  shell(`<h2 class="view-t">Galeria</h2><p class="view-sub">Seus mockups prontos — baixa e sobe no Gerenciador de Anúncios.</p>
     ${done.length ? `<div class="gal">${cells}</div>` : '<div class="empty">Nenhum mockup pronto ainda.</div>'}`);
 }
 
@@ -279,6 +408,7 @@ function viewAjustes() {
 function render() {
   if (!S.auth) return renderLogin();
   if (S.screen === 'novo-cenario') return viewNovoCenario();
+  if (S.screen === 'molduras') return viewMolduras();
   if (S.screen && S.screen.startsWith('aprovar:')) return viewAprovar(S.screen.slice(8));
   ({ cenarios: viewCenarios, novo: viewNovo, fila: viewFila, galeria: viewGaleria, ajustes: viewAjustes }[S.tab] || viewCenarios)();
 }
@@ -287,6 +417,7 @@ function render() {
 async function refresh() {
   const st = await api('state');
   S.cenarios = st.cenarios || [];
+  S.molduras = st.molduras || [];
   S.jobs = st.jobs || [];
   if (st.defaults) S.defaults = st.defaults;
   if (st.worker_token) S.workerToken = st.worker_token;

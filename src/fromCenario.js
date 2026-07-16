@@ -1,8 +1,9 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { expandCenario } from './expandCenario.js';
 import { buildKeyframePrompts } from './cenarios.js';
+import { describeMoldura } from './describeMoldura.js';
 import { generateProductImage } from './generateProductImage.js';
 import { img2img } from './img2img.js';
 
@@ -75,15 +76,30 @@ async function main() {
 
   const total = 7; // 1 expand + 6 keyframes
 
+  // moldura por FOTO (biblioteca): a imagem entra como referência img2img em
+  // TODOS os keyframes (padrão kraft-texture→K12) e a visão do Gemini descreve
+  // a moldura pro texto do prompt reforçar o alvo.
+  let molduraImg = null;
+  let molduraDesc = null;
+  if (cfg.molduraImage && existsSync(cfg.molduraImage)) {
+    molduraImg = path.join(outDir, 'moldura' + path.extname(cfg.molduraImage));
+    await copyFile(cfg.molduraImage, molduraImg);
+    console.log(`[1/${total}] lendo a moldura da foto (visão)…`);
+    const md = await describeMoldura(molduraImg);
+    molduraDesc = md.moldura;
+    console.log(`  moldura: ${molduraDesc}`);
+  }
+
   // 1) canoniza avatar/ambiente/moldura (expande do texto livre se preciso)
   let { avatar, ambiente, moldura, nome } = cfg;
+  if (molduraDesc) moldura = molduraDesc;
   const precisaExpandir = !avatar || !ambiente || !moldura;
   if (precisaExpandir) {
     console.log(`[1/${total}] interpretando a descrição (texto → prompt)…`);
     const ex = await expandCenario({
       avatarText: cfg.avatarText,
       ambienteText: cfg.ambienteText,
-      molduraText: cfg.molduraText,
+      molduraText: molduraDesc || cfg.molduraText,
       descricao: cfg.descricao,
     });
     avatar = avatar || ex.avatar;
@@ -94,27 +110,31 @@ async function main() {
     console.log(`[1/${total}] cenário já canônico, pulando interpretação`);
   }
 
-  const prompts = buildKeyframePrompts({ avatar, ambiente, moldura });
+  const prompts = buildKeyframePrompts({ avatar, ambiente, moldura, molduraRef: !!molduraImg });
   const ids = ['K1', 'K2', 'K3', 'K4', 'K5', 'K6'];
 
-  // 2) K1 = master (text2img)
+  // 2) K1 = master. Sem foto de moldura: text2img puro. Com foto: img2img
+  //    tendo a moldura como única referência (o modelo cria a cena copiando-a).
   const k1Path = path.join(kfDir, 'K1.png');
-  console.log(`[2/${total}] gerando K1 (master, text→imagem)…`);
+  console.log(`[2/${total}] gerando K1 (master${molduraImg ? ', moldura por referência' : ', text→imagem'})…`);
   await genKeyframe(
-    () => generateProductImage({ prompt: prompts.K1.prompt, outputPath: k1Path }),
+    () => molduraImg
+      ? img2img({ inputPaths: [molduraImg], prompt: prompts.K1.prompt, outputPath: k1Path, aspectRatio: '9:16' })
+      : generateProductImage({ prompt: prompts.K1.prompt, outputPath: k1Path }),
     'K1',
   );
   if (!existsSync(k1Path)) throw new Error('K1 não foi gerado');
 
-  // 3..7) K2..K6 = img2img a partir do K1 (mantém identidade/loja)
+  // 3..7) K2..K6 = img2img a partir do K1 (mantém identidade/loja); com foto
+  //        de moldura ela segue junto como última referência (fidelidade).
   for (let i = 1; i < ids.length; i += 1) {
     const id = ids[i];
     const dst = path.join(kfDir, `${id}.png`);
-    console.log(`[${i + 2}/${total}] gerando ${id} (img2img de K1)…`);
+    console.log(`[${i + 2}/${total}] gerando ${id} (img2img de K1${molduraImg ? '+moldura' : ''})…`);
     await genKeyframe(
       () =>
         img2img({
-          inputPaths: [k1Path],
+          inputPaths: molduraImg ? [k1Path, molduraImg] : [k1Path],
           prompt: prompts[id].prompt,
           outputPath: dst,
           aspectRatio: '9:16',
@@ -132,6 +152,7 @@ async function main() {
     moldura,
     movimento: cfg.movimento || 'medio',
     temAbertura: !!cfg.temAbertura,
+    molduraFoto: molduraImg ? path.basename(molduraImg) : null,
     versoKeyframe: cfg.versoKeyframe || null,
     keyframes: ids.map((id) => `keyframes/${id}.png`),
     status: 'aguardando_aprovacao',

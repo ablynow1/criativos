@@ -102,7 +102,15 @@ async function processCenario(job) {
   await mkdir(outDir, { recursive: true });
   const cfgPath = path.join(ROOT, 'tmp', `cenario-${job.id}.json`);
   await mkdir(path.dirname(cfgPath), { recursive: true });
-  await writeFile(cfgPath, JSON.stringify({ ...snap, id }, null, 2));
+  // moldura da biblioteca (foto): baixa e entra como referência na geração
+  let molduraImage = null;
+  if (snap.molduraUrl) {
+    await progress(job.id, 2, 'baixando a foto da moldura');
+    const ext = (snap.molduraUrl.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+    molduraImage = path.join(ROOT, 'tmp', `moldura-${job.id}.${ext}`);
+    await download(snap.molduraUrl, molduraImage);
+  }
+  await writeFile(cfgPath, JSON.stringify({ ...snap, id, molduraImage }, null, 2));
 
   await progress(job.id, 3, 'iniciando geração do palco');
   let lastSend = 0;
@@ -154,6 +162,7 @@ async function processMockup(job) {
     duracaoAlvo: snap.duracaoAlvo || 25,
     abertura: !!snap.abertura,
     audio: snap.audio || {},
+    formatos: Array.isArray(snap.formatos) ? snap.formatos : ['9:16'],
   };
   const cfgPath = path.join(jobDir, 'mockup.json');
   await writeFile(cfgPath, JSON.stringify(cfg, null, 2));
@@ -173,6 +182,12 @@ async function processMockup(job) {
   const form = new FormData();
   form.append('job_id', job.id);
   form.append('video', new Blob([videoBuf], { type: 'video/mp4' }), `mockup-${job.id}.mp4`);
+  // export 4:5 (se o fromMockup gerou)
+  const path45 = path.join(ROOT, outPath.replace(/\.mp4$/, '-45.mp4'));
+  if (existsSync(path45)) {
+    const buf45 = await readFile(path45);
+    form.append('video45', new Blob([buf45], { type: 'video/mp4' }), `mockup-${job.id}-45.mp4`);
+  }
   await call('worker_done', { form });
   log(`✅ mockup ${job.id} (“${job.nome}”) pronto — ${(videoBuf.length / 1e6).toFixed(1)}MB enviados`);
 }

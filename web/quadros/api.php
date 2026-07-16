@@ -88,10 +88,39 @@ if ($action === 'state') {
     out([
         'ok' => true,
         'cenarios' => jread('cenarios', []),
+        'molduras' => jread('molduras', []),
         'jobs' => jread('jobs', []),
         'defaults' => $CONFIG['defaults'],
         'worker_token' => $CONFIG['worker_token'], // logado é confiável (igual Cricri)
     ]);
+}
+
+// ============ MOLDURAS (biblioteca) ============
+if ($action === 'save_moldura') {
+    require_login(); require_csrf();
+    $b = body();
+    if (empty($b['url'])) fail('suba a foto da moldura primeiro');
+    $molduras = jread('molduras', []);
+    $rec = [
+        'id' => rid('mold_'),
+        'nome' => trim($b['nome'] ?? '') ?: 'Moldura',
+        'url' => $b['url'],
+        'created_at' => now(),
+    ];
+    array_unshift($molduras, $rec);
+    jwrite('molduras', $molduras);
+    out(['ok' => true, 'moldura' => $rec]);
+}
+if ($action === 'delete_moldura') {
+    require_login(); require_csrf();
+    $b = body();
+    $molduras = jread('molduras', []);
+    foreach ($molduras as $m) {
+        if ($m['id'] === ($b['id'] ?? '') && !empty($m['url'])) @unlink(__DIR__ . '/' . $m['url']);
+    }
+    $molduras = array_values(array_filter($molduras, fn($m) => $m['id'] !== ($b['id'] ?? '')));
+    jwrite('molduras', $molduras);
+    out(['ok' => true]);
 }
 
 // ============ CENÁRIOS ============
@@ -102,7 +131,24 @@ if ($action === 'queue_cenario') {
     $desc = trim($b['descricao'] ?? '');
     $av = trim($b['avatarText'] ?? '');
     $am = trim($b['ambienteText'] ?? '');
-    if ($desc === '' && ($av === '' || $am === '')) fail('descreva ao menos avatar e ambiente');
+    // "duplicar com outra moldura": herda avatar/ambiente canônicos (EN) de um
+    // cenário existente — só a moldura muda, a identidade/lugar ficam idênticos.
+    $avatarEN = ''; $ambienteEN = '';
+    if (!empty($b['duplicarDe'])) {
+        foreach (jread('cenarios', []) as $c) {
+            if ($c['id'] === $b['duplicarDe']) { $avatarEN = $c['avatar'] ?? ''; $ambienteEN = $c['ambiente'] ?? ''; }
+        }
+        if ($avatarEN === '') fail('cenário de origem não encontrado');
+    }
+    if ($avatarEN === '' && $desc === '' && ($av === '' || $am === '')) fail('descreva ao menos avatar e ambiente');
+    // moldura da biblioteca (foto vira referência na geração)
+    $molduraUrl = null; $molduraNome = null;
+    if (!empty($b['molduraId'])) {
+        foreach (jread('molduras', []) as $m) {
+            if ($m['id'] === $b['molduraId']) { $molduraUrl = $m['url']; $molduraNome = $m['nome']; }
+        }
+        if (!$molduraUrl) fail('moldura não encontrada na biblioteca');
+    }
     $id = preg_replace('/[^a-z0-9]+/', '-', strtolower($b['id'] ?? '')) ?: rid('cen_');
     $jobs = jread('jobs', []);
     $job = [
@@ -112,7 +158,9 @@ if ($action === 'queue_cenario') {
         'snapshot' => [
             'tipo' => 'cenario', 'id' => $id,
             'descricao' => $desc, 'avatarText' => $av, 'ambienteText' => $am,
+            'avatar' => $avatarEN ?: null, 'ambiente' => $ambienteEN ?: null,
             'molduraText' => trim($b['molduraText'] ?? ''),
+            'molduraUrl' => $molduraUrl, 'molduraNome' => $molduraNome,
             'movimento' => $b['movimento'] ?? 'medio',
             'temAbertura' => !empty($b['temAbertura']),
         ],
@@ -149,7 +197,12 @@ if ($action === 'queue_mockup') {
     require_login(); require_csrf();
     $b = body();
     if (empty($b['cenarioId'])) fail('escolha um cenário');
-    if (empty($b['arteUrl'])) fail('suba a arte do quadro');
+    // LOTE: aceita arteUrls[] (N artes -> N jobs) ou arteUrl único
+    $artes = [];
+    if (!empty($b['arteUrls']) && is_array($b['arteUrls'])) $artes = array_values(array_filter($b['arteUrls']));
+    elseif (!empty($b['arteUrl'])) $artes = [$b['arteUrl']];
+    if (!$artes) fail('suba a arte do quadro');
+    if (count($artes) > 10) fail('máximo 10 artes por lote');
     // o cenário precisa estar aprovado
     $cenarios = jread('cenarios', []);
     $cen = null;
@@ -157,25 +210,33 @@ if ($action === 'queue_mockup') {
     if (!$cen) fail('cenário não encontrado', 404);
     if (($cen['status'] ?? '') !== 'aprovado') fail('aprove o cenário antes de usar');
     $jobs = jread('jobs', []);
-    $job = [
-        'id' => rid('job_'),
-        'tipo' => 'mockup',
-        'nome' => $b['nome'] ?: ($cen['nome'] . ' · mockup'),
-        'snapshot' => [
+    $criados = [];
+    $n = count($artes);
+    foreach ($artes as $i => $arte) {
+        $sufixo = $n > 1 ? (' · arte ' . ($i + 1) . '/' . $n) : '';
+        $job = [
+            'id' => rid('job_'),
             'tipo' => 'mockup',
-            'cenarioId' => $b['cenarioId'],
-            'arteUrl' => $b['arteUrl'],
-            'movimento' => $b['movimento'] ?? 'medio',
-            'duracaoAlvo' => (int)($b['duracaoAlvo'] ?? 25),
-            'abertura' => !empty($b['abertura']),
-            'audio' => $b['audio'] ?? new stdClass(),
-        ],
-        'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
-        'video' => null, 'error' => null, 'created_at' => now(), 'updated_at' => now(),
-    ];
-    array_unshift($jobs, $job);
+            'nome' => ($b['nome'] ?: ($cen['nome'] . ' · mockup')) . $sufixo,
+            'snapshot' => [
+                'tipo' => 'mockup',
+                'cenarioId' => $b['cenarioId'],
+                'arteUrl' => $arte,
+                'movimento' => $b['movimento'] ?? 'medio',
+                'duracaoAlvo' => (int)($b['duracaoAlvo'] ?? 25),
+                'abertura' => !empty($b['abertura']),
+                'audio' => $b['audio'] ?? new stdClass(),
+                'formatos' => (!empty($b['formatos']) && is_array($b['formatos'])) ? $b['formatos'] : ['9:16'],
+            ],
+            'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
+            'video' => null, 'video45' => null, 'error' => null,
+            'created_at' => now(), 'updated_at' => now(),
+        ];
+        array_unshift($jobs, $job);
+        $criados[] = $job;
+    }
     jwrite('jobs', $jobs);
-    out(['ok' => true, 'job' => $job]);
+    out(['ok' => true, 'jobs' => $criados]);
 }
 
 // ============ FILA ============
@@ -190,6 +251,7 @@ if ($action === 'job_action') {
         if ($j['id'] === ($b['job_id'] ?? '')) {
             if ($op === 'delete') {
                 if (!empty($j['video'])) @unlink(__DIR__ . '/' . $j['video']);
+                if (!empty($j['video45'])) @unlink(__DIR__ . '/' . $j['video45']);
                 continue;
             }
             if ($op === 'cancel' && in_array($j['status'], ['queued', 'claimed', 'running'])) { $j['status'] = 'error'; $j['error'] = 'cancelado'; }
@@ -293,12 +355,16 @@ if ($action === 'worker_done') {
     } else if (isset($_FILES['video'])) {
         $name = 'mockup_' . $job_id . '.mp4';
         move_uploaded_file($_FILES['video']['tmp_name'], MEDIA . '/' . $name);
+        if (isset($_FILES['video45'])) {
+            move_uploaded_file($_FILES['video45']['tmp_name'], MEDIA . '/mockup_' . $job_id . '_45.mp4');
+        }
     }
 
     foreach ($jobs as &$j) {
         if ($j['id'] === $job_id) {
             $j['status'] = 'done'; $j['pct'] = 100; $j['stage'] = 'pronto';
             if (isset($_FILES['video'])) $j['video'] = 'media/mockup_' . $job_id . '.mp4';
+            if (isset($_FILES['video45'])) $j['video45'] = 'media/mockup_' . $job_id . '_45.mp4';
             $j['updated_at'] = now();
         }
     }

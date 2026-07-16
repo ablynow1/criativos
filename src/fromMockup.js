@@ -4,6 +4,10 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { buildVeoPrompts, buildSegments } from './cenarios.js';
 import { generateVideoClip } from './generateVideoClip.js';
+import { generateNarration } from './generateNarration.js';
+import { generateSubtitles } from './generateSubtitles.js';
+import { generateMusic } from './musicGen.js';
+import { mergeFinal } from './mergeFinal.js';
 import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
 
 /**
@@ -174,11 +178,85 @@ async function main() {
     '-movflags', '+faststart', silent,
   ]);
 
-  // 4) áudio: por ora usa o som ambiente da montagem (narração+trilha entram
-  //    numa próxima iteração — a infra de TTS/Lyria já existe no repo).
-  console.log('[4/4] finalizando…');
+  // 4) áudio de anúncio (opcional): narração TTS + trilha Lyria + legenda
+  //    queimada, com a mixagem de estúdio do repo (ducking sidechain, -14 LUFS).
+  console.log('[4/4] áudio e finalização…');
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await copyFile(silent, outputPath);
+  const audio = cfg.audio || {};
+  const temNarracao = !!(audio.narracao && String(audio.narracao).trim());
+  const temMusica = !!(audio.musica && audio.musica !== 'nenhuma');
+
+  let musicPath = null;
+  if (temMusica) {
+    console.log(`  trilha (${audio.musica})…`);
+    musicPath = path.join(tmpDir, 'trilha.wav');
+    try {
+      await generateMusic({ mood: audio.musica, outputPath: musicPath });
+    } catch (e) {
+      console.error(`  trilha falhou (seguindo sem): ${String(e.message).slice(0, 120)}`);
+      musicPath = null;
+    }
+  }
+
+  if (temNarracao) {
+    console.log('  narração (TTS)…');
+    const narr = await generateNarration({
+      text: String(audio.narracao).trim(),
+      outputAudioPath: path.join(tmpDir, 'narracao.mp3'),
+      voiceName: audio.voz || undefined,
+      direcao: audio.direcaoVoz || undefined,
+    });
+    // SRT: com legenda desligada, um SRT vazio queima nada (mergeFinal exige o arquivo)
+    const srtPath = path.join(tmpDir, 'legenda.srt');
+    if (audio.legenda && audio.legenda !== 'nenhuma') {
+      await generateSubtitles({
+        wordTimings: narr.wordTimings,
+        totalDurationSeconds: duracaoAlvo,
+        outputSrtPath: srtPath,
+        wordsPerCaption: 4,
+      });
+    } else {
+      await writeFile(srtPath, '');
+    }
+    await mergeFinal({
+      clipPaths: [silent],
+      narrationAudioPath: narr.audioPath,
+      srtPath,
+      outputPath,
+      tmpDir,
+      subtitleStyle: audio.legenda && audio.legenda !== 'nenhuma' ? audio.legenda : 'caixa',
+      musicPath,
+      ambiente: true,
+    });
+  } else if (musicPath) {
+    // só trilha (sem narração): mix simples ambiente + música com fade
+    await runFfmpeg([
+      '-i', silent, '-i', musicPath,
+      '-filter_complex',
+      `[1:a]volume=0.35,afade=t=in:d=1,afade=t=out:st=${Math.max(0, duracaoAlvo - 2)}:d=2[m];` +
+      `[0:a][m]amix=inputs=2:duration=first:dropout_transition=2,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`,
+      '-map', '0:v', '-map', '[aout]',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
+      outputPath,
+    ]);
+  } else {
+    await copyFile(silent, outputPath);
+  }
+
+  // export extra 4:5 (feed do Meta): center-crop 1080x1350 do 9:16
+  const formatos = Array.isArray(cfg.formatos) ? cfg.formatos : ['9:16'];
+  if (formatos.includes('4:5')) {
+    const out45 = outputPath.replace(/\.mp4$/, '-45.mp4');
+    console.log('  exportando 4:5 (feed)…');
+    await runFfmpeg([
+      '-i', outputPath,
+      '-vf', 'crop=1080:1350:0:285',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      '-c:a', 'copy', '-movflags', '+faststart',
+      out45,
+    ]);
+    console.log(`OK45 ${out45}`);
+  }
 
   const dur = await getDurationSeconds(outputPath);
   console.log(`OK mockup "${cenario.nome}" — ${dur.toFixed(2)}s em ${outputPath}`);

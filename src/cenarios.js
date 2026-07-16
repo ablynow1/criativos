@@ -47,9 +47,20 @@ function sameBlock({ moldura }) {
 // Os 6 shots FIXOS. Cada um recebe {avatar, ambiente, moldura} e devolve o
 // prompt completo do keyframe. K1 usa styleBlock (text2img, master); K2..K6
 // derivam por img2img (sameBlock) pra manter identidade.
-export function buildKeyframePrompts({ avatar, ambiente, moldura }) {
-  const STYLE = styleBlock({ avatar, ambiente, moldura });
-  const SAME = sameBlock({ moldura });
+//
+// `molduraRef: true` = a moldura vem de uma FOTO da biblioteca (entra como
+// referência img2img junto do prompt — mesmo padrão do kraft-texture→K12):
+// K1 recebe [fotoMoldura], K2..K6 recebem [K1, fotoMoldura]. As cláusulas
+// abaixo dizem ao modelo pra COPIAR a moldura da última referência; `moldura`
+// (texto, vindo do describeMoldura) continua no prompt reforçando o alvo.
+export function buildKeyframePrompts({ avatar, ambiente, moldura, molduraRef = false }) {
+  const STYLE = molduraRef
+    ? `The moulding reference image shows the EXACT picture-frame moulding of the product — reproduce it faithfully (same profile, material, finish, color and ornament) on the large frame.
+${styleBlock({ avatar, ambiente, moldura })}`
+    : styleBlock({ avatar, ambiente, moldura });
+  const SAME = molduraRef
+    ? `First reference image: the woman's identity (same face, same hair, same outfit, same hands) and the same setting. LAST reference image: the EXACT picture-frame moulding — keep reproducing it faithfully on the large frame (same profile, material, finish, color and ornament). The frame keeps its flat chroma-key green (#00FF00) artwork area — perfectly solid, flat and uniform, no reflections.`
+    : sameBlock({ moldura });
   return {
     K1: {
       master: true,
