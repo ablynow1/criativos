@@ -125,6 +125,20 @@ nav.tabs button.on { background:var(--gold); color:#1a1206; }
 .approve-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin:8px 0 16px; }
 .approve-grid img { width:100%; aspect-ratio:9/16; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
 
+/* home: pastas por formato */
+.top-back { border:0; background:transparent; color:var(--gold); font-size:14px; font-weight:650;
+  padding:4px 10px 4px 0; margin-right:2px; }
+.pastas { display:flex; flex-direction:column; gap:11px; }
+.pasta { display:flex; align-items:center; gap:14px; width:100%; text-align:left; border:1px solid var(--line);
+  background:var(--surface); border-radius:14px; padding:12px; color:var(--ink); }
+.pasta-ph { width:64px; height:64px; border-radius:10px; overflow:hidden; background:var(--bg2);
+  display:grid; place-items:center; font-size:26px; flex:none; }
+.pasta-ph img { width:100%; height:100%; object-fit:cover; }
+.pasta-tx { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.pasta-tx b { font-family:var(--serif); font-size:18px; font-weight:600; }
+.pasta-tx span { font-size:12.5px; color:var(--muted); }
+.pasta-ar { margin-left:auto; color:var(--faint); font-size:22px; }
+
 /* categorias */
 .chip.ghostchip { border-style:dashed; color:var(--faint); }
 .cat-tag { margin-top:8px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;

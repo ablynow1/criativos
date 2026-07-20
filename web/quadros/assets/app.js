@@ -6,7 +6,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 const app = $('#app');
 
 const S = {
-  auth: false, tab: 'cenarios', screen: null, catFiltro: 'todas',
+  auth: false, tab: 'cenarios', screen: null, catFiltro: null, // null = home (pastas)
   cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
   loja: { produtos: [], page: 1, busca: '', carregando: false },
   // form do mockup (artes = lote [{url,prev}]; cenarioIds = pool multi-select)
@@ -73,16 +73,23 @@ function renderLogin() {
 
 // ---------- SHELL ----------
 function shell(inner) {
+  const emHome = S.tab === 'cenarios' && !S.screen && !S.catFiltro;
   const tab = (id, label) => `<button class="${S.tab === id && !S.screen ? 'on' : ''}" data-tab="${id}">${IC[id]}<span>${label}</span></button>`;
   app.innerHTML = `
-    <header class="top"><span class="mk">Quadros</span><span class="sp"></span></header>
+    <header class="top">${emHome ? '' : '<button class="top-back" id="top-home">‹ home</button>'}<span class="mk">Quadros</span><span class="sp"></span></header>
     <main>${inner}</main>
     <nav class="tabs">
-      ${tab('cenarios', 'Cenários')}${tab('novo', 'Novo')}${tab('fila', 'Fila')}${tab('galeria', 'Galeria')}${tab('ajustes', 'Ajustes')}
+      ${tab('cenarios', 'Início')}${tab('novo', 'Novo')}${tab('fila', 'Fila')}${tab('galeria', 'Galeria')}${tab('ajustes', 'Ajustes')}
     </nav>`;
   app.querySelectorAll('nav.tabs button').forEach((b) => {
-    b.onclick = () => { S.tab = b.dataset.tab; S.screen = null; render(); };
+    b.onclick = () => {
+      S.tab = b.dataset.tab; S.screen = null;
+      if (b.dataset.tab === 'cenarios') S.catFiltro = null; // Início = home das pastas
+      render();
+    };
   });
+  const hb = $('#top-home');
+  if (hb) hb.onclick = () => { S.tab = 'cenarios'; S.screen = null; S.catFiltro = null; render(); };
 }
 
 // ---------- CENÁRIOS ----------
@@ -90,18 +97,47 @@ function catNome(id) {
   return (S.categorias.find((k) => k.id === id) || {}).nome || id || '—';
 }
 
-function viewCenarios() {
-  // filtro por categoria (chips com contagem); "todas" sempre disponível
+// ---------- HOME: pastas por formato ----------
+function viewPastas() {
   const conta = (id) => S.cenarios.filter((c) => (c.categoria || 'ugc') === id).length;
-  const catChips = [
-    `<button class="chip ${S.catFiltro === 'todas' ? 'on' : ''}" data-cf="todas">todas · ${S.cenarios.length}</button>`,
-    ...S.categorias.map((k) => `<button class="chip ${S.catFiltro === k.id ? 'on' : ''}" data-cf="${esc(k.id)}">${esc(k.nome)} · ${conta(k.id)}</button>`),
-  ].join('');
-  // categoria ERMOS = biblioteca de FUNDOS (lugares), não cenários com modelo
-  if (S.catFiltro === 'ermos') return viewFundos(catChips);
-  const visiveis = S.catFiltro === 'todas'
-    ? S.cenarios
-    : S.cenarios.filter((c) => (c.categoria || 'ugc') === S.catFiltro);
+  const pastas = S.categorias.map((k) => {
+    let sub, prev;
+    if (k.id === 'ermos') {
+      const prontos = S.fundos.filter((f) => f.status === 'pronto');
+      sub = `${prontos.length} lugar${prontos.length === 1 ? '' : 'es'} ativo${prontos.length === 1 ? '' : 's'} de ${S.fundos.length} · quadro flutuante`;
+      prev = (prontos[0] || S.fundos[0] || {}).thumb;
+    } else {
+      const n = conta(k.id);
+      sub = n ? `${n} cenário${n === 1 ? '' : 's'} · modelo apresenta` : 'vazia — crie o primeiro cenário';
+      prev = (S.cenarios.find((c) => (c.categoria || 'ugc') === k.id) || {}).thumbs?.[0];
+    }
+    return `<button class="pasta" data-pasta="${esc(k.id)}">
+      <div class="pasta-ph">${prev ? `<img src="${esc(prev)}" alt="">` : '<span>📁</span>'}</div>
+      <div class="pasta-tx"><b>${esc(k.nome)}</b><span>${esc(sub)}</span></div>
+      <span class="pasta-ar">›</span>
+    </button>`;
+  }).join('');
+  shell(`
+    <h2 class="view-t">Formatos</h2>
+    <p class="view-sub">Cada formato é uma linguagem de criativo, com seus próprios cenários.</p>
+    <div class="pastas">${pastas}</div>
+    <div class="spacer"></div>
+    <div class="btnrow">
+      <button class="btn ghost" id="edit-cats">⚙ Categorias</button>
+      <button class="btn ghost" id="go-mold">🖼 Molduras${S.molduras.length ? ` (${S.molduras.length})` : ''}</button>
+    </div>
+  `);
+  app.querySelectorAll('[data-pasta]').forEach((b) => b.onclick = () => { S.catFiltro = b.dataset.pasta; render(); });
+  $('#edit-cats').onclick = () => { S.screen = 'categorias'; render(); };
+  $('#go-mold').onclick = () => { S.screen = 'molduras'; render(); };
+}
+
+function viewCenarios() {
+  if (!S.catFiltro) return viewPastas();
+  // pasta ERMOS = biblioteca de LUGARES (quadro flutuante, sem modelo)
+  if (S.catFiltro === 'ermos') return viewFundos();
+  const catN = catNome(S.catFiltro);
+  const visiveis = S.cenarios.filter((c) => (c.categoria || 'ugc') === S.catFiltro);
   const cards = visiveis.map((c) => {
     const thumbs = (c.thumbs || []).slice(0, 3).map((u) => `<img src="${esc(u)}" alt="">`).join('') || '<div></div><div></div><div></div>';
     const wait = c.status !== 'aprovado';
@@ -119,29 +155,22 @@ function viewCenarios() {
       </div>
     </div>`;
   }).join('');
-  const vazioMsg = S.cenarios.length
-    ? `<div class="empty">Nenhum cenário em <b>${esc(catNome(S.catFiltro))}</b> ainda.<br>Crie o primeiro palco dessa categoria.</div>`
-    : '<div class="empty">Nenhum cenário ainda.<br>Crie o primeiro palco acima.</div>';
   shell(`
-    <h2 class="view-t">Cenários</h2>
-    <p class="view-sub">O palco: modelo + ambiente + moldura. Monta uma vez, reusa sempre.</p>
+    <h2 class="view-t">📁 ${esc(catN)}</h2>
+    <p class="view-sub">Cenários do formato ${esc(catN)}: modelo + ambiente + moldura. Monta uma vez, reusa sempre.</p>
     <div class="btnrow">
-      <button class="btn" id="new-cen">+ Novo cenário</button>
+      <button class="btn" id="new-cen">+ Novo cenário ${esc(catN)}</button>
       <button class="btn ghost" id="go-mold">🖼 Molduras${S.molduras.length ? ` (${S.molduras.length})` : ''}</button>
     </div>
-    <div class="field" style="margin-top:14px"><label>Categoria</label>
-      <div class="chips">${catChips}<button class="chip ghostchip" id="edit-cats">⚙ editar</button></div>
-    </div>
-    ${cards ? `<div class="grid">${cards}</div>` : vazioMsg}
+    <div class="spacer"></div>
+    ${cards ? `<div class="grid">${cards}</div>` : `<div class="empty">Pasta <b>${esc(catN)}</b> vazia.<br>Crie o primeiro cenário dela acima.</div>`}
   `);
   $('#new-cen').onclick = () => {
     S.cn.duplicarDe = null; S.cn.duplicarNome = '';
-    S.cn.categoria = S.catFiltro === 'todas' ? (S.categorias[0]?.id || 'ugc') : S.catFiltro;
+    S.cn.categoria = S.catFiltro;
     S.screen = 'novo-cenario'; render();
   };
   $('#go-mold').onclick = () => { S.screen = 'molduras'; render(); };
-  $('#edit-cats').onclick = () => { S.screen = 'categorias'; render(); };
-  app.querySelectorAll('[data-cf]').forEach((b) => b.onclick = () => { S.catFiltro = b.dataset.cf; render(); });
   app.querySelectorAll('[data-movecat]').forEach((b) => b.onclick = async () => {
     const c = S.cenarios.find((x) => x.id === b.dataset.movecat);
     if (!c || !S.categorias.length) return;
@@ -170,8 +199,8 @@ function viewCenarios() {
   });
 }
 
-// ---------- FUNDOS (modo ERMOS: lugares onde o quadro flutua) ----------
-function viewFundos(catChips) {
+// ---------- FUNDOS (pasta ERMOS: lugares onde o quadro flutua) ----------
+function viewFundos() {
   const cards = S.fundos.map((f) => {
     const st = f.status;
     const badge = st === 'pronto' ? '<span class="st ok">✓ pronto pra usar</span>'
@@ -188,14 +217,11 @@ function viewFundos(catChips) {
     </div>`;
   }).join('');
   shell(`
-    <h2 class="view-t">Ermos · Lugares</h2>
+    <h2 class="view-t">📁 Ermos · Lugares</h2>
     <p class="view-sub">O quadro flutua sobre esses cenários (sem modelo). Ative um lugar 1x — o vídeo dele fica pronto pra sempre.</p>
-    <div class="field"><label>Categoria</label><div class="chips">${catChips}<button class="chip ghostchip" id="edit-cats">⚙ editar</button></div></div>
     <div class="grid">${cards}</div>
     <div class="hint" style="margin-top:14px">Ativar = ~1 min (gera o vídeo ambiente do lugar no Veo). Depois, cada criativo Ermos é montado em segundos, sem custo de vídeo.</div>
   `);
-  $('#edit-cats').onclick = () => { S.screen = 'categorias'; render(); };
-  app.querySelectorAll('[data-cf]').forEach((b) => b.onclick = () => { S.catFiltro = b.dataset.cf; render(); });
   app.querySelectorAll('[data-ativar]').forEach((b) => b.onclick = async () => {
     try { await api('queue_fundo', { body: { id: b.dataset.ativar } }); await refresh(); toast('gerando o lugar — acompanhe na Fila'); }
     catch (e) { toast(e.message, true); }
@@ -292,7 +318,7 @@ function viewCategorias() {
     const k = S.categorias.find((x) => x.id === b.dataset.delcat);
     const n = conta(k.id);
     if (!confirm(`Apagar a categoria "${k.nome}"?${n ? `\n\nOs ${n} cenário(s) dela vão pra primeira categoria da lista.` : ''}`)) return;
-    try { await api('delete_categoria', { body: { id: k.id } }); if (S.catFiltro === k.id) S.catFiltro = 'todas'; await refresh(); S.screen = 'categorias'; render(); }
+    try { await api('delete_categoria', { body: { id: k.id } }); if (S.catFiltro === k.id) S.catFiltro = null; await refresh(); S.screen = 'categorias'; render(); }
     catch (e) { toast(e.message, true); }
   });
 }
