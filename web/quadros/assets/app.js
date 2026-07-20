@@ -6,15 +6,15 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 const app = $('#app');
 
 const S = {
-  auth: false, tab: 'cenarios', screen: null,
-  cenarios: [], molduras: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
+  auth: false, tab: 'cenarios', screen: null, catFiltro: 'todas',
+  cenarios: [], categorias: [], molduras: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
   // form do mockup (artes = lote [{url,prev}]; cenarioIds = pool multi-select)
   mk: { cenarioIds: [], artes: [], modo: 'sortear', movimento: 'medio', duracaoAlvo: 25, abertura: false,
     narracao: '', voz: 'pt-BR-Neural2-C', musica: 'nenhuma', legenda: 'caixa', fmt45: false, variar: false },
   // form do cenário (molduraId = da biblioteca; duplicarDe = herda avatar/ambiente)
   cn: { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
     nome: '', movimento: 'medio', temAbertura: false, duplicarDe: null, duplicarNome: '',
-    variacoes: 1, diversificar: 'avatar' },
+    variacoes: 1, diversificar: 'avatar', categoria: 'ugc' },
 };
 
 const VOZES = [
@@ -83,8 +83,21 @@ function shell(inner) {
 }
 
 // ---------- CENÁRIOS ----------
+function catNome(id) {
+  return (S.categorias.find((k) => k.id === id) || {}).nome || id || '—';
+}
+
 function viewCenarios() {
-  const cards = S.cenarios.map((c) => {
+  // filtro por categoria (chips com contagem); "todas" sempre disponível
+  const conta = (id) => S.cenarios.filter((c) => (c.categoria || 'ugc') === id).length;
+  const catChips = [
+    `<button class="chip ${S.catFiltro === 'todas' ? 'on' : ''}" data-cf="todas">todas · ${S.cenarios.length}</button>`,
+    ...S.categorias.map((k) => `<button class="chip ${S.catFiltro === k.id ? 'on' : ''}" data-cf="${esc(k.id)}">${esc(k.nome)} · ${conta(k.id)}</button>`),
+  ].join('');
+  const visiveis = S.catFiltro === 'todas'
+    ? S.cenarios
+    : S.cenarios.filter((c) => (c.categoria || 'ugc') === S.catFiltro);
+  const cards = visiveis.map((c) => {
     const thumbs = (c.thumbs || []).slice(0, 3).map((u) => `<img src="${esc(u)}" alt="">`).join('') || '<div></div><div></div><div></div>';
     const wait = c.status !== 'aprovado';
     return `<div class="card">
@@ -93,6 +106,7 @@ function viewCenarios() {
         <h3>${esc(c.nome)}</h3>
         <div class="st ${wait ? 'wait' : 'ok'}">${wait ? '● aguardando aprovação' : '✓ aprovado'}</div>
         <p class="desc">${esc(c.ambiente || '')}</p>
+        <button class="cat-tag" data-movecat="${esc(c.id)}" title="mudar de categoria">${esc(catNome(c.categoria || 'ugc'))} ▾</button>
       </div>
       <div class="cactions">
         ${wait ? `<button class="btn sm" data-approve="${esc(c.id)}">Ver / aprovar</button>` : `<button class="btn sm" data-use="${esc(c.id)}">Usar</button><button class="btn sm ghost" data-dup="${esc(c.id)}" title="mesmo palco, outra moldura">⟳ moldura</button>`}
@@ -100,6 +114,9 @@ function viewCenarios() {
       </div>
     </div>`;
   }).join('');
+  const vazioMsg = S.cenarios.length
+    ? `<div class="empty">Nenhum cenário em <b>${esc(catNome(S.catFiltro))}</b> ainda.<br>Crie o primeiro palco dessa categoria.</div>`
+    : '<div class="empty">Nenhum cenário ainda.<br>Crie o primeiro palco acima.</div>';
   shell(`
     <h2 class="view-t">Cenários</h2>
     <p class="view-sub">O palco: modelo + ambiente + moldura. Monta uma vez, reusa sempre.</p>
@@ -107,11 +124,31 @@ function viewCenarios() {
       <button class="btn" id="new-cen">+ Novo cenário</button>
       <button class="btn ghost" id="go-mold">🖼 Molduras${S.molduras.length ? ` (${S.molduras.length})` : ''}</button>
     </div>
-    <div class="spacer"></div>
-    ${S.cenarios.length ? `<div class="grid">${cards}</div>` : '<div class="empty">Nenhum cenário ainda.<br>Crie o primeiro palco acima.</div>'}
+    <div class="field" style="margin-top:14px"><label>Categoria</label>
+      <div class="chips">${catChips}<button class="chip ghostchip" id="edit-cats">⚙ editar</button></div>
+    </div>
+    ${cards ? `<div class="grid">${cards}</div>` : vazioMsg}
   `);
-  $('#new-cen').onclick = () => { S.cn.duplicarDe = null; S.cn.duplicarNome = ''; S.screen = 'novo-cenario'; render(); };
+  $('#new-cen').onclick = () => {
+    S.cn.duplicarDe = null; S.cn.duplicarNome = '';
+    S.cn.categoria = S.catFiltro === 'todas' ? (S.categorias[0]?.id || 'ugc') : S.catFiltro;
+    S.screen = 'novo-cenario'; render();
+  };
   $('#go-mold').onclick = () => { S.screen = 'molduras'; render(); };
+  $('#edit-cats').onclick = () => { S.screen = 'categorias'; render(); };
+  app.querySelectorAll('[data-cf]').forEach((b) => b.onclick = () => { S.catFiltro = b.dataset.cf; render(); });
+  app.querySelectorAll('[data-movecat]').forEach((b) => b.onclick = async () => {
+    const c = S.cenarios.find((x) => x.id === b.dataset.movecat);
+    if (!c || !S.categorias.length) return;
+    const atual = c.categoria || 'ugc';
+    const lista = S.categorias.map((k, i) => `${i + 1}. ${k.nome}`).join('\n');
+    const escolha = prompt(`Mover "${c.nome}" para qual categoria?\n\n${lista}\n\n(digite o número)`, String(S.categorias.findIndex((k) => k.id === atual) + 1));
+    if (!escolha) return;
+    const alvo = S.categorias[Number(escolha) - 1];
+    if (!alvo) return toast('opção inválida', true);
+    try { await api('move_cenario', { body: { id: c.id, categoria: alvo.id } }); await refresh(); toast(`movido pra ${alvo.nome}`); }
+    catch (e) { toast(e.message, true); }
+  });
   app.querySelectorAll('[data-approve]').forEach((b) => b.onclick = () => { S.screen = 'aprovar:' + b.dataset.approve; render(); });
   app.querySelectorAll('[data-use]').forEach((b) => b.onclick = () => { S.mk.cenarioId = b.dataset.use; S.tab = 'novo'; S.screen = null; render(); });
   app.querySelectorAll('[data-dup]').forEach((b) => b.onclick = () => {
@@ -124,6 +161,49 @@ function viewCenarios() {
   app.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
     if (!confirm('Apagar este cenário?')) return;
     try { await api('delete_cenario', { body: { id: b.dataset.del } }); await refresh(); toast('cenário apagado'); }
+    catch (e) { toast(e.message, true); }
+  });
+}
+
+// ---------- CATEGORIAS ----------
+function viewCategorias() {
+  const conta = (id) => S.cenarios.filter((c) => (c.categoria || 'ugc') === id).length;
+  const linhas = S.categorias.map((k) => `<div class="row">
+    <span class="rl">${esc(k.nome)} <span style="color:var(--faint)">· ${conta(k.id)} cenário${conta(k.id) === 1 ? '' : 's'}</span></span>
+    <span style="display:flex;gap:7px">
+      <button class="btn sm ghost" data-rencat="${esc(k.id)}">renomear</button>
+      <button class="btn sm danger" data-delcat="${esc(k.id)}">✕</button>
+    </span>
+  </div>`).join('');
+  shell(`
+    <h2 class="view-t">Categorias</h2>
+    <p class="view-sub">Organize o acervo por linguagem de criativo (UGC, POV, Ermos…).</p>
+    ${linhas}
+    <div class="spacer"></div>
+    <button class="btn" id="new-cat">+ Nova categoria</button>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="cat-back">Voltar</button>
+    <div class="hint" style="margin-top:10px">Ao apagar uma categoria, os cenários dela vão pra primeira da lista — nada se perde.</div>
+  `);
+  $('#cat-back').onclick = () => { S.screen = null; render(); };
+  $('#new-cat').onclick = async () => {
+    const nome = prompt('Nome da categoria (ex: POV, Unboxing, Depoimento):');
+    if (!nome || !nome.trim()) return;
+    try { await api('save_categoria', { body: { nome: nome.trim() } }); await refresh(); S.screen = 'categorias'; render(); toast('categoria criada ✓'); }
+    catch (e) { toast(e.message, true); }
+  };
+  app.querySelectorAll('[data-rencat]').forEach((b) => b.onclick = async () => {
+    const k = S.categorias.find((x) => x.id === b.dataset.rencat);
+    const nome = prompt('Novo nome:', k?.nome || '');
+    if (!nome || !nome.trim()) return;
+    try { await api('save_categoria', { body: { id: k.id, nome: nome.trim() } }); await refresh(); S.screen = 'categorias'; render(); }
+    catch (e) { toast(e.message, true); }
+  });
+  app.querySelectorAll('[data-delcat]').forEach((b) => b.onclick = async () => {
+    const k = S.categorias.find((x) => x.id === b.dataset.delcat);
+    const n = conta(k.id);
+    if (!confirm(`Apagar a categoria "${k.nome}"?${n ? `\n\nOs ${n} cenário(s) dela vão pra primeira categoria da lista.` : ''}`)) return;
+    try { await api('delete_categoria', { body: { id: k.id } }); if (S.catFiltro === k.id) S.catFiltro = 'todas'; await refresh(); S.screen = 'categorias'; render(); }
     catch (e) { toast(e.message, true); }
   });
 }
@@ -191,6 +271,9 @@ function viewNovoCenario() {
       ? `Mesmo palco de <b>${esc(c.duplicarNome)}</b> (mesma modelo, mesmo lugar) — só a moldura muda. Um cenário novo é gerado pra você aprovar.`
       : 'Descreva em texto livre — eu viro o prompt técnico e gero os 6 quadros-base pra você aprovar.'}</p>
     ${dup ? '' : `
+    <div class="field"><label>Categoria</label>
+      <div class="chips">${S.categorias.map((k) => `<button class="chip ${c.categoria === k.id ? 'on' : ''}" data-catsel="${esc(k.id)}">${esc(k.nome)}</button>`).join('')}</div>
+    </div>
     <div class="field"><label>Descrição da cena</label>
       <textarea id="f-desc" placeholder="ex: uma ruiva de vestido preto numa galeria minimalista branca, luz de dia">${esc(c.descricao)}</textarea>
       <div class="hint">Pode jogar tudo aqui, ou detalhar nos campos abaixo.</div>
@@ -223,6 +306,7 @@ function viewNovoCenario() {
   bind('#f-mo', (e) => c.molduraText = e.target.value);
   app.querySelectorAll('[data-move]').forEach((b) => b.onclick = () => { c.movimento = b.dataset.move; render(); });
   app.querySelectorAll('[data-mold]').forEach((b) => b.onclick = () => { c.molduraId = b.dataset.mold || null; render(); });
+  app.querySelectorAll('[data-catsel]').forEach((b) => b.onclick = () => { c.categoria = b.dataset.catsel; render(); });
   app.querySelectorAll('[data-varn]').forEach((b) => b.onclick = () => { c.variacoes = +b.dataset.varn; render(); });
   app.querySelectorAll('[data-divr]').forEach((b) => b.onclick = () => { c.diversificar = b.dataset.divr; render(); });
   $('#go-mold2').onclick = (e) => { e.preventDefault(); S.screen = 'molduras'; render(); };
@@ -240,7 +324,7 @@ function viewNovoCenario() {
       const nPalcos = dup ? 1 : c.variacoes;
       S.cn = { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
         nome: '', movimento: 'medio', temAbertura: false, duplicarDe: null, duplicarNome: '',
-        variacoes: 1, diversificar: 'avatar' };
+        variacoes: 1, diversificar: 'avatar', categoria: c.categoria };
       S.screen = null; S.tab = 'fila'; await refresh();
       toast(nPalcos > 1 ? `gerando ${nPalcos} palcos — acompanhe na Fila` : 'gerando o palco — acompanhe na Fila');
     } catch (e) { toast(e.message, true); }
@@ -443,6 +527,7 @@ function viewAjustes() {
 function render() {
   if (!S.auth) return renderLogin();
   if (S.screen === 'novo-cenario') return viewNovoCenario();
+  if (S.screen === 'categorias') return viewCategorias();
   if (S.screen === 'molduras') return viewMolduras();
   if (S.screen && S.screen.startsWith('aprovar:')) return viewAprovar(S.screen.slice(8));
   ({ cenarios: viewCenarios, novo: viewNovo, fila: viewFila, galeria: viewGaleria, ajustes: viewAjustes }[S.tab] || viewCenarios)();
@@ -452,6 +537,7 @@ function render() {
 async function refresh() {
   const st = await api('state');
   S.cenarios = st.cenarios || [];
+  S.categorias = st.categorias || [];
   S.molduras = st.molduras || [];
   S.jobs = st.jobs || [];
   if (st.defaults) S.defaults = st.defaults;

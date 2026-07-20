@@ -125,6 +125,11 @@ nav.tabs button.on { background:var(--gold); color:#1a1206; }
 .approve-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin:8px 0 16px; }
 .approve-grid img { width:100%; aspect-ratio:9/16; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
 
+/* categorias */
+.chip.ghostchip { border-style:dashed; color:var(--faint); }
+.cat-tag { margin-top:8px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  background:var(--gold-soft); color:var(--gold); border:0; border-radius:6px; padding:4px 9px; }
+
 /* molduras (biblioteca) */
 .btnrow { display:flex; gap:9px; } .btnrow .btn { flex:1; }
 .mold-ph { aspect-ratio:1; background:var(--bg2); display:grid; place-items:center; overflow:hidden; }

@@ -140,6 +140,7 @@ async function processCenario(job) {
     form.append('job_id', job.id);
     form.append('cenario_id', path.basename(dir));
     form.append('cenario', await readFile(cjPath, 'utf-8'));
+    form.append('categoria', snap.categoria || 'ugc');
     for (const k of ['K1', 'K2', 'K3', 'K4', 'K5', 'K6']) {
       const p = path.join(dir, 'keyframes', `${k}.png`);
       if (existsSync(p)) {

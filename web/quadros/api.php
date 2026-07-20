@@ -54,6 +54,31 @@ function seed_config(): array {
 }
 $CONFIG = seed_config();
 
+// ---- categorias de cenário (organização do acervo) ----
+// UGC = o formato original (modelo apresentando o quadro numa loja/galeria).
+// Ermos/POV entram vazias pra receber cenários com outra linguagem.
+function seed_categorias(): array {
+    $cats = jread('categorias', null);
+    if ($cats === null) {
+        $cats = [
+            ['id' => 'ugc', 'nome' => 'UGC'],
+            ['id' => 'ermos', 'nome' => 'Ermos'],
+            ['id' => 'pov', 'nome' => 'POV'],
+        ];
+        jwrite('categorias', $cats);
+        // migra o acervo existente pro UGC (tudo que veio antes é UGC)
+        $cenarios = jread('cenarios', []);
+        $mudou = false;
+        foreach ($cenarios as &$c) {
+            if (empty($c['categoria'])) { $c['categoria'] = 'ugc'; $mudou = true; }
+        }
+        unset($c);
+        if ($mudou) jwrite('cenarios', $cenarios);
+    }
+    return $cats;
+}
+$CATEGORIAS = seed_categorias();
+
 function require_login(): void {
     if (empty($_SESSION['quadros_auth'])) fail('não autenticado', 401);
 }
@@ -89,11 +114,65 @@ if ($action === 'state') {
     out([
         'ok' => true,
         'cenarios' => jread('cenarios', []),
+        'categorias' => jread('categorias', []),
         'molduras' => jread('molduras', []),
         'jobs' => jread('jobs', []),
         'defaults' => $CONFIG['defaults'],
         'worker_token' => $CONFIG['worker_token'], // logado é confiável (igual Cricri)
     ]);
+}
+
+// ============ CATEGORIAS ============
+if ($action === 'save_categoria') {
+    require_login(); require_csrf();
+    $b = body();
+    $nome = trim($b['nome'] ?? '');
+    if ($nome === '') fail('dê um nome pra categoria');
+    if (mb_strlen($nome) > 24) fail('nome muito longo (máx 24)');
+    $cats = jread('categorias', []);
+    if (!empty($b['id'])) { // renomear
+        $achou = false;
+        foreach ($cats as &$c) if ($c['id'] === $b['id']) { $c['nome'] = $nome; $achou = true; }
+        unset($c);
+        if (!$achou) fail('categoria não encontrada', 404);
+    } else {             // criar
+        $id = preg_replace('/[^a-z0-9]+/', '-', strtolower($nome));
+        $id = trim($id, '-') ?: rid('cat_');
+        foreach ($cats as $c) if ($c['id'] === $id) fail('já existe uma categoria com esse nome');
+        $cats[] = ['id' => $id, 'nome' => $nome];
+    }
+    jwrite('categorias', $cats);
+    out(['ok' => true, 'categorias' => $cats]);
+}
+if ($action === 'delete_categoria') {
+    require_login(); require_csrf();
+    $b = body();
+    $id = $b['id'] ?? '';
+    $cats = jread('categorias', []);
+    $restantes = array_values(array_filter($cats, fn($c) => $c['id'] !== $id));
+    if (count($restantes) === count($cats)) fail('categoria não encontrada', 404);
+    if (!$restantes) fail('mantenha ao menos uma categoria');
+    // cenários órfãos migram pra primeira categoria restante
+    $destino = $restantes[0]['id'];
+    $cenarios = jread('cenarios', []);
+    foreach ($cenarios as &$c) if (($c['categoria'] ?? '') === $id) $c['categoria'] = $destino;
+    unset($c);
+    jwrite('cenarios', $cenarios);
+    jwrite('categorias', $restantes);
+    out(['ok' => true, 'categorias' => $restantes, 'movidos_para' => $destino]);
+}
+if ($action === 'move_cenario') {
+    require_login(); require_csrf();
+    $b = body();
+    $cats = array_column(jread('categorias', []), 'id');
+    if (!in_array($b['categoria'] ?? '', $cats, true)) fail('categoria inválida');
+    $cenarios = jread('cenarios', []);
+    $achou = false;
+    foreach ($cenarios as &$c) if ($c['id'] === ($b['id'] ?? '')) { $c['categoria'] = $b['categoria']; $c['updated_at'] = now(); $achou = true; }
+    unset($c);
+    if (!$achou) fail('cenário não encontrado', 404);
+    jwrite('cenarios', $cenarios);
+    out(['ok' => true]);
 }
 
 // ============ MOLDURAS (biblioteca) ============
@@ -166,6 +245,7 @@ if ($action === 'queue_cenario') {
             'temAbertura' => !empty($b['temAbertura']),
             'variacoes' => max(1, min(4, (int)($b['variacoes'] ?? 1))),
             'diversificar' => in_array($b['diversificar'] ?? '', ['avatar', 'ambiente', 'ambos']) ? $b['diversificar'] : 'avatar',
+            'categoria' => in_array($b['categoria'] ?? '', array_column($CATEGORIAS, 'id'), true) ? $b['categoria'] : 'ugc',
         ],
         'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
         'result' => null, 'error' => null, 'created_at' => now(), 'updated_at' => now(),
@@ -359,10 +439,14 @@ function register_cenario(): void {
         }
     }
     $meta = json_decode((string)($_POST['cenario'] ?? '{}'), true) ?: [];
+    $cats = array_column(jread('categorias', []), 'id');
+    $cat = $_POST['categoria'] ?? ($meta['categoria'] ?? 'ugc');
+    if (!in_array($cat, $cats, true)) $cat = $cats[0] ?? 'ugc';
     $cenarios = jread('cenarios', []);
     $rec = [
         'id' => $cid,
         'nome' => $meta['nome'] ?? 'Cenário',
+        'categoria' => $cat,
         'avatar' => $meta['avatar'] ?? '', 'ambiente' => $meta['ambiente'] ?? '',
         'moldura' => $meta['moldura'] ?? '', 'movimento' => $meta['movimento'] ?? 'medio',
         'temAbertura' => !empty($meta['temAbertura']),
