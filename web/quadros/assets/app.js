@@ -655,7 +655,10 @@ function viewFila() {
   const jobs = S.jobs;
   const rows = jobs.map((j) => {
     const running = ['claimed', 'running'].includes(j.status);
-    const badge = j.tipo === 'mockup' ? '<span class="jt mock">mockup</span>' : '<span class="jt">cenário</span>';
+    const badge = j.tipo === 'mockup' ? '<span class="jt mock">mockup</span>'
+      : j.tipo === 'ermos' ? '<span class="jt mock">ermos</span>'
+      : j.tipo === 'fundo' ? '<span class="jt">lugar</span>'
+      : '<span class="jt">cenário</span>';
     return `<div class="job">
       <div class="jh">${badge}<span class="jn">${esc(j.nome)}</span></div>
       <div class="stage">${esc(j.stage || j.status)}${j.status === 'done' ? ' ✓' : ''}</div>
@@ -680,7 +683,7 @@ function viewFila() {
 
 // ---------- GALERIA ----------
 function viewGaleria() {
-  const done = S.jobs.filter((j) => j.tipo === 'mockup' && j.status === 'done' && j.video);
+  const done = S.jobs.filter((j) => ['mockup', 'ermos'].includes(j.tipo) && j.status === 'done' && j.video);
   const cells = done.map((j) => `<div>
     <video src="${esc(j.video)}" controls playsinline preload="metadata"></video>
     <div class="gcap">${esc(j.nome)}</div>
