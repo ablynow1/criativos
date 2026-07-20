@@ -1,0 +1,42 @@
+[
+ {
+  "id": "marina-luxo",
+  "nome": "Marina de luxo",
+  "hint": "iates, palmeiras, carros — o cenário do ad original"
+ },
+ {
+  "id": "amalfi",
+  "nome": "Costa Amalfitana",
+  "hint": "Positano — casas pastel no penhasco sobre o mar"
+ },
+ {
+  "id": "santorini",
+  "nome": "Santorini",
+  "hint": "branco e azul grego sobre a caldeira"
+ },
+ {
+  "id": "toscana",
+  "nome": "Toscana",
+  "hint": "ciprestes e colinas douradas"
+ },
+ {
+  "id": "museu",
+  "nome": "Museu clássico",
+  "hint": "salão de mármore com colunas"
+ },
+ {
+  "id": "como",
+  "nome": "Lago de Como",
+  "hint": "lago alpino, vilas e montanhas"
+ },
+ {
+  "id": "riviera",
+  "nome": "Riviera Francesa",
+  "hint": "porto estilo Mônaco ao entardecer"
+ },
+ {
+  "id": "grecia-antiga",
+  "nome": "Grécia antiga",
+  "hint": "ruínas de templo em luz dourada"
+ }
+]

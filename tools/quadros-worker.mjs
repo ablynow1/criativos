@@ -207,6 +207,84 @@ async function processMockup(job) {
   log(`✅ mockup ${job.id} (“${job.nome}”) pronto — ${(videoBuf.length / 1e6).toFixed(1)}MB enviados`);
 }
 
+const FUNDOS_DIR = path.join(ROOT, 'output', 'quadros', 'fundos');
+
+// FUNDO (modo Ermos): gera o vídeo ambiente do lugar (1x) e avisa a web.
+async function processFundo(job) {
+  const snap = job.snapshot || {};
+  const outDir = path.join(FUNDOS_DIR, snap.fundoId);
+  const cfgPath = path.join(ROOT, 'tmp', `fundo-${job.id}.json`);
+  await mkdir(path.dirname(cfgPath), { recursive: true });
+  await writeFile(cfgPath, JSON.stringify({ id: snap.fundoId }, null, 2));
+  await progress(job.id, 5, 'ativando o lugar');
+  let lastSend = 0;
+  await runCli(['src/fromFundo.js', '--config', cfgPath, '--out', outDir], (line) => {
+    const m = line.match(/\[F (\d)\/2\]/);
+    const now = Date.now();
+    if (m) { progress(job.id, m[1] === '1' ? 20 : 55, m[1] === '1' ? 'gerando a imagem do lugar' : 'animando o lugar (Veo 8s)'); lastSend = now; }
+    else if (now - lastSend > 4000) { progress(job.id, undefined, undefined, line); lastSend = now; }
+  });
+  const form = new FormData();
+  form.append('job_id', job.id);
+  form.append('fundo_id', snap.fundoId);
+  await call('worker_done', { form });
+  log(`✅ fundo ${snap.fundoId} pronto (vídeo no Mac, reusável pra sempre)`);
+}
+
+// MOCKUP ERMOS: quadro flutuante trocando artes sobre os fundos (sem Veo).
+async function processErmos(job) {
+  const snap = job.snapshot || {};
+  const jobDir = path.join(ROOT, 'tmp', `ermos-${job.id}`);
+  await mkdir(jobDir, { recursive: true });
+  const fundoDirs = (snap.fundoIds || []).map((id) => path.join(FUNDOS_DIR, id))
+    .filter((d) => existsSync(path.join(d, 'fundo.mp4')));
+  if (!fundoDirs.length) throw new Error('nenhum fundo pronto neste Mac — ative os lugares antes');
+  await progress(job.id, 4, 'baixando as artes');
+  const artes = [];
+  for (let i = 0; i < (snap.arteUrls || []).length; i += 1) {
+    const u = snap.arteUrls[i];
+    const ext = (u.split('?')[0].split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const p = path.join(jobDir, `arte-${i}.${ext}`);
+    await download(u, p);
+    artes.push(p);
+  }
+  let logoPath = null;
+  if (snap.logoUrl) {
+    logoPath = path.join(jobDir, 'logo.png');
+    await download(snap.logoUrl, logoPath);
+  }
+  const cfg = {
+    fundoDirs, artes, logoPath,
+    moldura: snap.moldura || 'preto',
+    ritmo: snap.ritmo || 0.9,
+    legenda: snap.legenda || '',
+    musica: snap.musica || 'nenhuma',
+    formatos: Array.isArray(snap.formatos) ? snap.formatos : ['9:16'],
+  };
+  const cfgPath = path.join(jobDir, 'ermos.json');
+  await writeFile(cfgPath, JSON.stringify(cfg, null, 2));
+  const outPath = path.join('output', 'quadros', 'mockups', `ermos-${job.id}.mp4`);
+  await progress(job.id, 10, 'compondo');
+  let lastSend = 0;
+  await runCli(['src/fromErmos.js', '--config', cfgPath, '--out', outPath], (line) => {
+    const m = line.match(/\[(\d)\/3\]/);
+    const now = Date.now();
+    if (m) { progress(job.id, [25, 55, 80][+m[1] - 1], ['montando os quadros', 'montando os fundos', 'compondo o vídeo'][+m[1] - 1]); lastSend = now; }
+    else if (now - lastSend > 4000) { progress(job.id, undefined, undefined, line); lastSend = now; }
+  });
+  await progress(job.id, 96, 'subindo pra galeria');
+  const videoBuf = await readFile(path.join(ROOT, outPath));
+  const form = new FormData();
+  form.append('job_id', job.id);
+  form.append('video', new Blob([videoBuf], { type: 'video/mp4' }), `ermos-${job.id}.mp4`);
+  const p45 = path.join(ROOT, outPath.replace(/\.mp4$/, '-45.mp4'));
+  if (existsSync(p45)) {
+    form.append('video45', new Blob([await readFile(p45)], { type: 'video/mp4' }), `ermos-${job.id}-45.mp4`);
+  }
+  await call('worker_done', { form });
+  log(`✅ ermos ${job.id} pronto — ${(videoBuf.length / 1e6).toFixed(1)}MB`);
+}
+
 async function loop() {
   log(`Quadros worker ligado → ${BASE} (poll ${POLL_MS / 1000}s). Ctrl+C pra parar.`);
   for (;;) {
@@ -216,6 +294,8 @@ async function loop() {
         log(`🖼️  job recebido: ${job.id} — “${job.nome}” (${job.snapshot?.tipo || '?'})`);
         try {
           if (job.snapshot?.tipo === 'cenario') await processCenario(job);
+          else if (job.snapshot?.tipo === 'fundo') await processFundo(job);
+          else if (job.snapshot?.tipo === 'ermos') await processErmos(job);
           else await processMockup(job);
         } catch (err) {
           await flushProgress();

@@ -7,10 +7,13 @@ const app = $('#app');
 
 const S = {
   auth: false, tab: 'cenarios', screen: null, catFiltro: 'todas',
-  cenarios: [], categorias: [], molduras: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
+  cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
+  loja: { produtos: [], page: 1, busca: '', carregando: false },
   // form do mockup (artes = lote [{url,prev}]; cenarioIds = pool multi-select)
-  mk: { cenarioIds: [], artes: [], modo: 'sortear', movimento: 'medio', duracaoAlvo: 25, abertura: false,
-    narracao: '', voz: 'pt-BR-Neural2-C', musica: 'nenhuma', legenda: 'caixa', fmt45: false, variar: false },
+  mk: { formato: 'ugc', cenarioIds: [], artes: [], modo: 'sortear', movimento: 'medio', duracaoAlvo: 25, abertura: false,
+    narracao: '', voz: 'pt-BR-Neural2-C', musica: 'nenhuma', legenda: 'caixa', fmt45: false, variar: false,
+    // ermos
+    fundoIds: [], moldura2d: 'preto', ritmo: 0.9, legendaErmos: 'TODAS AS OBRAS JÁ DISPONÍVEIS EM NOSSO SITE', logoUrl: null },
   // form do cenário (molduraId = da biblioteca; duplicarDe = herda avatar/ambiente)
   cn: { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
     nome: '', movimento: 'medio', temAbertura: false, duplicarDe: null, duplicarNome: '',
@@ -94,6 +97,8 @@ function viewCenarios() {
     `<button class="chip ${S.catFiltro === 'todas' ? 'on' : ''}" data-cf="todas">todas · ${S.cenarios.length}</button>`,
     ...S.categorias.map((k) => `<button class="chip ${S.catFiltro === k.id ? 'on' : ''}" data-cf="${esc(k.id)}">${esc(k.nome)} · ${conta(k.id)}</button>`),
   ].join('');
+  // categoria ERMOS = biblioteca de FUNDOS (lugares), não cenários com modelo
+  if (S.catFiltro === 'ermos') return viewFundos(catChips);
   const visiveis = S.catFiltro === 'todas'
     ? S.cenarios
     : S.cenarios.filter((c) => (c.categoria || 'ugc') === S.catFiltro);
@@ -163,6 +168,90 @@ function viewCenarios() {
     try { await api('delete_cenario', { body: { id: b.dataset.del } }); await refresh(); toast('cenário apagado'); }
     catch (e) { toast(e.message, true); }
   });
+}
+
+// ---------- FUNDOS (modo ERMOS: lugares onde o quadro flutua) ----------
+function viewFundos(catChips) {
+  const cards = S.fundos.map((f) => {
+    const st = f.status;
+    const badge = st === 'pronto' ? '<span class="st ok">✓ pronto pra usar</span>'
+      : st === 'gerando' ? '<span class="st wait">● gerando o vídeo…</span>'
+      : st === 'erro' ? '<span class="st" style="color:var(--red)">✕ falhou</span>'
+      : '<span class="st" style="color:var(--faint)">○ não ativado</span>';
+    const acao = st === 'pronto' ? `<button class="btn sm" data-usef="${esc(f.id)}">Usar</button>`
+      : st === 'gerando' ? ''
+      : `<button class="btn sm ghost" data-ativar="${esc(f.id)}">${st === 'erro' ? 'Tentar de novo' : '⚡ Ativar lugar'}</button>`;
+    return `<div class="card">
+      <div class="fundo-ph"><img src="${esc(f.thumb)}" alt="${esc(f.nome)}" loading="lazy"></div>
+      <div class="cbody"><h3>${esc(f.nome)}</h3>${badge}<p class="desc">${esc(f.hint)}</p></div>
+      <div class="cactions">${acao}</div>
+    </div>`;
+  }).join('');
+  shell(`
+    <h2 class="view-t">Ermos · Lugares</h2>
+    <p class="view-sub">O quadro flutua sobre esses cenários (sem modelo). Ative um lugar 1x — o vídeo dele fica pronto pra sempre.</p>
+    <div class="field"><label>Categoria</label><div class="chips">${catChips}<button class="chip ghostchip" id="edit-cats">⚙ editar</button></div></div>
+    <div class="grid">${cards}</div>
+    <div class="hint" style="margin-top:14px">Ativar = ~1 min (gera o vídeo ambiente do lugar no Veo). Depois, cada criativo Ermos é montado em segundos, sem custo de vídeo.</div>
+  `);
+  $('#edit-cats').onclick = () => { S.screen = 'categorias'; render(); };
+  app.querySelectorAll('[data-cf]').forEach((b) => b.onclick = () => { S.catFiltro = b.dataset.cf; render(); });
+  app.querySelectorAll('[data-ativar]').forEach((b) => b.onclick = async () => {
+    try { await api('queue_fundo', { body: { id: b.dataset.ativar } }); await refresh(); toast('gerando o lugar — acompanhe na Fila'); }
+    catch (e) { toast(e.message, true); }
+  });
+  app.querySelectorAll('[data-usef]').forEach((b) => b.onclick = () => {
+    S.mk.formato = 'ermos';
+    if (!S.mk.fundoIds.includes(b.dataset.usef)) S.mk.fundoIds.push(b.dataset.usef);
+    S.tab = 'novo'; S.screen = null; render();
+  });
+}
+
+// ---------- LOJA (picker de artes do catálogo Shopify) ----------
+function viewLoja() {
+  const L = S.loja;
+  const sel = new Set(S.mk.artes.map((a) => a.url));
+  const cells = L.produtos.map((p, i) => `
+    <div class="loja-item ${sel.has(p.img) ? 'sel' : ''}" data-lp="${i}">
+      <img src="${esc(p.img)}" alt="" loading="lazy">
+      <div class="lt">${esc(p.titulo.slice(0, 46))}</div>
+      ${sel.has(p.img) ? '<div class="lcheck">✓</div>' : ''}
+    </div>`).join('');
+  shell(`
+    <h2 class="view-t">Escolher da loja</h2>
+    <p class="view-sub">Toque nas obras — cada uma vira uma arte do criativo. ${S.mk.artes.length ? `<b>${S.mk.artes.length} selecionada${S.mk.artes.length > 1 ? 's' : ''}</b>.` : ''}</p>
+    <div class="field"><input type="text" id="lj-q" placeholder="buscar por título…" value="${esc(L.busca)}"></div>
+    ${L.carregando ? '<div class="empty">carregando o catálogo…</div>'
+      : (cells ? `<div class="loja-grid">${cells}</div>` : '<div class="empty">nada encontrado nesta página</div>')}
+    <div class="btnrow" style="margin-top:14px">
+      <button class="btn ghost" id="lj-prev" ${L.page <= 1 ? 'disabled' : ''}>◀ anterior</button>
+      <button class="btn ghost" id="lj-next">próxima ▶</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="lj-ok">Concluir seleção${S.mk.artes.length ? ` (${S.mk.artes.length})` : ''}</button>
+  `);
+  let t;
+  $('#lj-q').oninput = (e) => { L.busca = e.target.value; clearTimeout(t); t = setTimeout(() => carregaLoja(), 350); };
+  $('#lj-prev').onclick = () => { if (L.page > 1) { L.page -= 1; carregaLoja(); } };
+  $('#lj-next').onclick = () => { L.page += 1; carregaLoja(); };
+  $('#lj-ok').onclick = () => { S.screen = null; S.tab = 'novo'; render(); };
+  app.querySelectorAll('[data-lp]').forEach((el) => el.onclick = () => {
+    const p = L.produtos[+el.dataset.lp];
+    const i = S.mk.artes.findIndex((a) => a.url === p.img);
+    if (i >= 0) S.mk.artes.splice(i, 1);
+    else if (S.mk.artes.length < 16) S.mk.artes.push({ url: p.img, prev: p.img });
+    else return toast('máximo 16 artes', true);
+    render();
+  });
+}
+
+async function carregaLoja() {
+  S.loja.carregando = true; render();
+  try {
+    const r = await api(`loja_produtos&page=${S.loja.page}&q=${encodeURIComponent(S.loja.busca)}`);
+    S.loja.produtos = r.produtos || [];
+  } catch (e) { toast(e.message, true); }
+  S.loja.carregando = false; render();
 }
 
 // ---------- CATEGORIAS ----------
@@ -353,9 +442,16 @@ function viewAprovar(id) {
 
 // ---------- NOVO MOCKUP ----------
 function viewNovo() {
+  const fmtChips = `<div class="field"><label>Formato</label><div class="chips">
+    <button class="chip ${S.mk.formato === 'ugc' ? 'on' : ''}" data-fmt="ugc">🎬 UGC (modelo apresenta)</button>
+    <button class="chip ${S.mk.formato === 'ermos' ? 'on' : ''}" data-fmt="ermos">🖼 Ermos (quadro flutuante)</button>
+  </div></div>`;
+  const bindFmt = () => app.querySelectorAll('[data-fmt]').forEach((b) => b.onclick = () => { S.mk.formato = b.dataset.fmt; render(); });
+  if (S.mk.formato === 'ermos') return viewNovoErmos(fmtChips, bindFmt);
   const aprovados = S.cenarios.filter((c) => c.status === 'aprovado');
   if (!aprovados.length) {
-    return shell(`<h2 class="view-t">Novo mockup</h2><div class="empty">Você precisa de um cenário aprovado primeiro.<br>Vá em Cenários e crie um palco.</div>`);
+    shell(`<h2 class="view-t">Novo mockup</h2>${fmtChips}<div class="empty">Você precisa de um cenário aprovado primeiro.<br>Vá em Cenários e crie um palco.</div>`);
+    return bindFmt();
   }
   const m = S.mk;
   // saneia o pool (cenários apagados/não-aprovados saem)
@@ -379,6 +475,7 @@ function viewNovo() {
   const estouro = total > 20;
   shell(`
     <h2 class="view-t">Novo mockup</h2>
+    ${fmtChips}
     <p class="view-sub">Escolha 1+ palcos, suba 1+ artes. ${total > 1 ? `Vai gerar <b>${total} vídeos</b> (~${estClipes} clipes Veo).` : `Sai o vídeo nativo de ${m.duracaoAlvo}s.`}</p>
     <div class="field"><label>Cenário${multi ? 's · ' + m.cenarioIds.length : ''} (toque pra ligar/desligar)</label>
       <div class="chips">${cenChips}</div>
@@ -408,6 +505,7 @@ function viewNovo() {
     ${estouro ? `<div class="hint" style="color:var(--red);margin-bottom:8px">Máximo 20 vídeos por lote — reduza artes ou cenários.</div>` : ''}
     <button class="btn" id="mk-go" ${m.artes.length && !estouro ? '' : 'disabled'}>Renderizar ${total > 1 ? total + ' vídeos' : 'mockup'}</button>
   `);
+  bindFmt();
   app.querySelectorAll('[data-cen]').forEach((b) => b.onclick = () => {
     const id = b.dataset.cen;
     const i = m.cenarioIds.indexOf(id);
@@ -441,6 +539,94 @@ function viewNovo() {
       m.artes = [];
       S.tab = 'fila'; await refresh();
       toast(n > 1 ? `${n} vídeos na fila 🎬` : 'renderizando — acompanhe na Fila');
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
+// ---------- NOVO MOCKUP · formato ERMOS (quadro flutuante) ----------
+function viewNovoErmos(fmtChips, bindFmt) {
+  const m = S.mk;
+  const prontos = S.fundos.filter((f) => f.status === 'pronto');
+  m.fundoIds = m.fundoIds.filter((id) => prontos.find((f) => f.id === id));
+  if (!prontos.length) {
+    shell(`<h2 class="view-t">Novo mockup</h2>${fmtChips}
+      <div class="empty">Nenhum lugar ativado ainda.<br>Vá em <b>Cenários → Ermos</b> e ative um lugar (Marina, Amalfi, Santorini…).</div>
+      <button class="btn" id="go-fundos">Ver os lugares</button>`);
+    bindFmt();
+    $('#go-fundos').onclick = () => { S.tab = 'cenarios'; S.catFiltro = 'ermos'; render(); };
+    return;
+  }
+  if (!m.fundoIds.length) m.fundoIds = [prontos[0].id];
+  const fundoChips = prontos.map((f) => `<button class="chip ${m.fundoIds.includes(f.id) ? 'on' : ''}" data-fnd="${esc(f.id)}">${esc(f.nome)}</button>`).join('');
+  const moldBtns = [['preto', '⬛ Preto'], ['branco', '⬜ Branco'], ['marfim', '🟨 Marfim'], ['arabesco', '👑 Arabesco']]
+    .map(([id, lb]) => `<button class="chip ${m.moldura2d === id ? 'on' : ''}" data-m2d="${id}">${lb}</button>`).join('');
+  const ritmoChips = [[0.7, 'rápido 0,7s'], [0.9, 'médio 0,9s'], [1.2, 'calmo 1,2s']]
+    .map(([v, lb]) => `<button class="chip ${m.ritmo === v ? 'on' : ''}" data-rit="${v}">${lb}</button>`).join('');
+  const triChips = TRILHAS.map((t) => `<button class="chip ${m.musica === t ? 'on' : ''}" data-tri="${t}">${t}</button>`).join('');
+  const artesHtml = m.artes.map((a, i) => `<div class="arte-th"><img src="${esc(a.prev)}" alt=""><button class="arte-x" data-delarte="${i}">✕</button></div>`).join('');
+  const dur = Math.min(15, Math.max(6, m.artes.length * m.ritmo)).toFixed(1);
+  shell(`
+    <h2 class="view-t">Novo mockup</h2>
+    ${fmtChips}
+    <p class="view-sub">O quadro flutua sobre o lugar, trocando de arte no ritmo do anúncio. ${m.artes.length ? `<b>${m.artes.length} artes ≈ ${dur}s</b> de vídeo.` : 'Sem modelo, sem espera de Veo — sai em segundos.'}</p>
+    <div class="field"><label>Lugar${m.fundoIds.length > 1 ? 'es · ' + m.fundoIds.length : ''} (2+ = o fundo troca durante o vídeo)</label>
+      <div class="chips">${fundoChips}</div></div>
+    <div class="field"><label>Moldura</label><div class="chips">${moldBtns}</div></div>
+    <div class="field"><label>Arte${m.artes.length > 1 ? 's' : ''} ${m.artes.length ? `· ${m.artes.length}` : ''} (trocam em sequência)</label>
+      <div class="artes-row">${artesHtml}
+        <div class="drop mini" id="drop"><div class="t">${m.artes.length ? '+ mais' : 'subir'}</div></div>
+        <button class="btn sm ghost" id="da-loja" style="align-self:center">🛍 da loja</button>
+      </div>
+    </div>
+    <div class="field"><label>Ritmo da troca</label><div class="chips">${ritmoChips}</div></div>
+    <div class="field"><label>Legenda fixa (embaixo)</label>
+      <input type="text" id="er-leg" value="${esc(m.legendaErmos)}"></div>
+    <div class="field"><label>Logo no topo (opcional)</label>
+      <div class="btnrow"><button class="btn sm ghost" id="er-logo">${m.logoUrl ? '✓ logo carregado · trocar' : 'subir logo (png)'}</button>
+      ${m.logoUrl ? '<button class="btn sm danger" id="er-logo-x">✕</button>' : ''}</div></div>
+    <div class="field"><label>Trilha musical</label><div class="chips">${triChips}</div></div>
+    <div class="row"><span class="rl">Exportar também 4:5 (feed do Meta)</span><button class="tg ${m.fmt45 ? 'on' : ''}" id="mk-45"></button></div>
+    <div class="spacer"></div>
+    <button class="btn" id="er-go" ${m.artes.length ? '' : 'disabled'}>Renderizar criativo Ermos</button>
+  `);
+  bindFmt();
+  app.querySelectorAll('[data-fnd]').forEach((b) => b.onclick = () => {
+    const id = b.dataset.fnd; const i = m.fundoIds.indexOf(id);
+    if (i >= 0) { if (m.fundoIds.length > 1) m.fundoIds.splice(i, 1); } else m.fundoIds.push(id);
+    render();
+  });
+  app.querySelectorAll('[data-m2d]').forEach((b) => b.onclick = () => { m.moldura2d = b.dataset.m2d; render(); });
+  app.querySelectorAll('[data-rit]').forEach((b) => b.onclick = () => { m.ritmo = +b.dataset.rit; render(); });
+  app.querySelectorAll('[data-tri]').forEach((b) => b.onclick = () => { m.musica = b.dataset.tri; render(); });
+  app.querySelectorAll('[data-delarte]').forEach((b) => b.onclick = () => { m.artes.splice(+b.dataset.delarte, 1); render(); });
+  $('#er-leg').oninput = (e) => { m.legendaErmos = e.target.value; };
+  $('#drop').onclick = pickArtes;
+  $('#da-loja').onclick = () => { S.screen = 'loja'; render(); if (!S.loja.produtos.length) carregaLoja(); };
+  $('#er-logo').onclick = () => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/png';
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      const fd = new FormData(); fd.append('file', f);
+      try { const r = await api('upload_image', { form: fd }); m.logoUrl = r.url; render(); toast('logo ok'); }
+      catch (e) { toast(e.message, true); }
+    };
+    inp.click();
+  };
+  const lx = $('#er-logo-x'); if (lx) lx.onclick = () => { m.logoUrl = null; render(); };
+  const t45 = $('#mk-45'); if (t45) t45.onclick = () => { m.fmt45 = !m.fmt45; render(); };
+  $('#er-go').onclick = async () => {
+    try {
+      await api('queue_ermos', { body: {
+        fundoIds: m.fundoIds, moldura: m.moldura2d,
+        arteUrls: m.artes.map((a) => a.url),
+        ritmo: m.ritmo, legenda: m.legendaErmos.trim(),
+        logoUrl: m.logoUrl, musica: m.musica,
+        formatos: m.fmt45 ? ['9:16', '4:5'] : ['9:16'], nome: '',
+      } });
+      m.artes = [];
+      S.tab = 'fila'; await refresh();
+      toast('criativo Ermos na fila 🖼');
     } catch (e) { toast(e.message, true); }
   };
 }
@@ -529,6 +715,7 @@ function render() {
   if (S.screen === 'novo-cenario') return viewNovoCenario();
   if (S.screen === 'categorias') return viewCategorias();
   if (S.screen === 'molduras') return viewMolduras();
+  if (S.screen === 'loja') return viewLoja();
   if (S.screen && S.screen.startsWith('aprovar:')) return viewAprovar(S.screen.slice(8));
   ({ cenarios: viewCenarios, novo: viewNovo, fila: viewFila, galeria: viewGaleria, ajustes: viewAjustes }[S.tab] || viewCenarios)();
 }
@@ -539,6 +726,7 @@ async function refresh() {
   S.cenarios = st.cenarios || [];
   S.categorias = st.categorias || [];
   S.molduras = st.molduras || [];
+  S.fundos = st.fundos || [];
   S.jobs = st.jobs || [];
   if (st.defaults) S.defaults = st.defaults;
   if (st.worker_token) S.workerToken = st.worker_token;

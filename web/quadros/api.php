@@ -116,10 +116,111 @@ if ($action === 'state') {
         'cenarios' => jread('cenarios', []),
         'categorias' => jread('categorias', []),
         'molduras' => jread('molduras', []),
+        'fundos' => fundos_com_status(),
         'jobs' => jread('jobs', []),
         'defaults' => $CONFIG['defaults'],
         'worker_token' => $CONFIG['worker_token'], // logado é confiável (igual Cricri)
     ]);
+}
+
+// ============ FUNDOS (modo ERMOS) ============
+// A lista de lugares vem do manifest estático (deployado com o app); o estado
+// de ativação (disponivel|gerando|pronto|erro) vive em data/fundos.json.
+function fundos_com_status(): array {
+    $manifest = json_decode((string)@file_get_contents(__DIR__ . '/assets/fundos/manifest.json'), true) ?: [];
+    $status = jread('fundos', []);
+    foreach ($manifest as &$f) {
+        $f['thumb'] = 'assets/fundos/' . $f['id'] . '.jpg';
+        $f['status'] = $status[$f['id']]['status'] ?? 'disponivel';
+    }
+    unset($f);
+    return $manifest;
+}
+if ($action === 'queue_fundo') {
+    require_login(); require_csrf();
+    $b = body();
+    $fid = $b['id'] ?? '';
+    $manifest = fundos_com_status();
+    $preset = null;
+    foreach ($manifest as $f) if ($f['id'] === $fid) $preset = $f;
+    if (!$preset) fail('lugar desconhecido');
+    if (in_array($preset['status'], ['gerando', 'pronto'])) fail('esse lugar já está ' . $preset['status']);
+    $status = jread('fundos', []);
+    $status[$fid] = ['status' => 'gerando', 'updated_at' => now()];
+    jwrite('fundos', $status);
+    $jobs = jread('jobs', []);
+    $job = [
+        'id' => rid('job_'), 'tipo' => 'fundo',
+        'nome' => 'Fundo · ' . $preset['nome'],
+        'snapshot' => ['tipo' => 'fundo', 'fundoId' => $fid],
+        'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
+        'video' => null, 'error' => null, 'created_at' => now(), 'updated_at' => now(),
+    ];
+    array_unshift($jobs, $job);
+    jwrite('jobs', $jobs);
+    out(['ok' => true, 'job' => $job]);
+}
+if ($action === 'queue_ermos') {
+    require_login(); require_csrf();
+    $b = body();
+    $fundoIds = array_values(array_filter($b['fundoIds'] ?? []));
+    if (!$fundoIds) fail('escolha ao menos um lugar pronto');
+    $prontos = [];
+    foreach (fundos_com_status() as $f) if ($f['status'] === 'pronto') $prontos[] = $f['id'];
+    foreach ($fundoIds as $fid) if (!in_array($fid, $prontos, true)) fail("o lugar $fid ainda não está pronto");
+    $artes = array_values(array_filter($b['arteUrls'] ?? []));
+    if (!$artes) fail('escolha as artes (upload ou da loja)');
+    if (count($artes) > 16) fail('máximo 16 artes por vídeo');
+    if (!in_array($b['moldura'] ?? '', ['preto', 'branco', 'marfim', 'arabesco'])) fail('escolha a moldura');
+    $jobs = jread('jobs', []);
+    $job = [
+        'id' => rid('job_'), 'tipo' => 'ermos',
+        'nome' => ($b['nome'] ?? '') ?: ('Ermos · ' . $b['moldura'] . ' · ' . count($artes) . ' artes'),
+        'snapshot' => [
+            'tipo' => 'ermos', 'fundoIds' => $fundoIds,
+            'moldura' => $b['moldura'], 'arteUrls' => $artes,
+            'ritmo' => max(0.5, min(2, (float)($b['ritmo'] ?? 0.9))),
+            'legenda' => trim($b['legenda'] ?? ''),
+            'logoUrl' => $b['logoUrl'] ?? null,
+            'musica' => $b['musica'] ?? 'nenhuma',
+            'formatos' => (!empty($b['formatos']) && is_array($b['formatos'])) ? $b['formatos'] : ['9:16'],
+        ],
+        'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
+        'video' => null, 'video45' => null, 'error' => null,
+        'created_at' => now(), 'updated_at' => now(),
+    ];
+    array_unshift($jobs, $job);
+    jwrite('jobs', $jobs);
+    out(['ok' => true, 'job' => $job]);
+}
+
+// ============ LOJA (picker de artes via products.json da Shopify) ============
+if ($action === 'loja_produtos') {
+    require_login();
+    $loja = rtrim($CONFIG['defaults']['lojaUrl'] ?? 'https://ateliermalta.com.br', '/');
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $q = mb_strtolower(trim($_GET['q'] ?? ''));
+    $cacheFile = DATA . "/loja_cache_$page.json";
+    $dados = null;
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < 600) {
+        $dados = json_decode((string)file_get_contents($cacheFile), true);
+    }
+    if (!$dados) {
+        $ctx = stream_context_create(['http' => ['timeout' => 15, 'header' => "User-Agent: QuadrosStudio/1.0\r\n"]]);
+        $raw = @file_get_contents("$loja/products.json?limit=250&page=$page", false, $ctx);
+        if ($raw === false) fail('não consegui falar com a loja', 502);
+        $js = json_decode($raw, true);
+        $dados = [];
+        foreach (($js['products'] ?? []) as $p) {
+            $img = $p['images'][0]['src'] ?? null;
+            if ($img) $dados[] = ['titulo' => $p['title'], 'img' => $img];
+        }
+        @file_put_contents($cacheFile, json_encode($dados, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+    if ($q !== '') {
+        $dados = array_values(array_filter($dados, fn($p) => str_contains(mb_strtolower($p['titulo']), $q)));
+    }
+    out(['ok' => true, 'produtos' => $dados, 'page' => $page]);
 }
 
 // ============ CATEGORIAS ============
@@ -472,7 +573,12 @@ if ($action === 'worker_done') {
     $job_id = $_POST['job_id'] ?? '';
     $jobs = jread('jobs', []);
 
-    if (!empty($_POST['cenario_id']) && isset($_FILES['keyframes'])) {
+    if (!empty($_POST['fundo_id'])) {
+        // fundo do modo Ermos ficou pronto (vídeo vive no Mac; aqui só o status)
+        $status = jread('fundos', []);
+        $status[preg_replace('/[^a-z0-9\-]/', '', $_POST['fundo_id'])] = ['status' => 'pronto', 'updated_at' => now()];
+        jwrite('fundos', $status);
+    } else if (!empty($_POST['cenario_id']) && isset($_FILES['keyframes'])) {
         register_cenario();
     } else if (isset($_FILES['video'])) {
         $name = 'mockup_' . $job_id . '.mp4';
@@ -499,7 +605,15 @@ if ($action === 'worker_error') {
     $b = body();
     $jobs = jread('jobs', []);
     foreach ($jobs as &$j) {
-        if ($j['id'] === ($b['job_id'] ?? '')) { $j['status'] = 'error'; $j['error'] = $b['message'] ?? 'erro'; $j['updated_at'] = now(); }
+        if ($j['id'] === ($b['job_id'] ?? '')) {
+            $j['status'] = 'error'; $j['error'] = $b['message'] ?? 'erro'; $j['updated_at'] = now();
+            // fundo que falhou volta pra "erro" (senão fica "gerando" pra sempre)
+            if (($j['snapshot']['tipo'] ?? '') === 'fundo' && !empty($j['snapshot']['fundoId'])) {
+                $st = jread('fundos', []);
+                $st[$j['snapshot']['fundoId']] = ['status' => 'erro', 'updated_at' => now()];
+                jwrite('fundos', $st);
+            }
+        }
     }
     unset($j);
     jwrite('jobs', $jobs);
