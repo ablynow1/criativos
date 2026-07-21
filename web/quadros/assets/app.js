@@ -8,12 +8,13 @@ const app = $('#app');
 const S = {
   auth: false, tab: 'cenarios', screen: null, catFiltro: null, // null = home (pastas)
   cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
-  loja: { produtos: [], page: 1, busca: '', carregando: false },
+  loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], carregando: false },
   // form do mockup (artes = lote [{url,prev}]; cenarioIds = pool multi-select)
   mk: { formato: 'ugc', cenarioIds: [], artes: [], modo: 'sortear', movimento: 'medio', duracaoAlvo: 25, abertura: false,
     narracao: '', voz: 'pt-BR-Neural2-C', musica: 'nenhuma', legenda: 'caixa', fmt45: false, variar: false,
     // ermos
-    fundoIds: [], moldura2d: 'preto', ritmo: 0.9, legendaErmos: 'TODAS AS OBRAS JÁ DISPONÍVEIS EM NOSSO SITE', logoUrl: null },
+    fundoIds: [], moldura2d: 'preto', ritmo: 0.3, duracaoErmos: 8,
+    legendaErmos: 'TODAS AS OBRAS JÁ DISPONÍVEIS EM NOSSO SITE', logoUrl: null },
   // form do cenário (molduraId = da biblioteca; duplicarDe = herda avatar/ambiente)
   cn: { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
     nome: '', movimento: 'medio', temAbertura: false, duplicarDe: null, duplicarNome: '',
@@ -240,26 +241,39 @@ function viewLoja() {
   const cells = L.produtos.map((p, i) => `
     <div class="loja-item ${sel.has(p.img) ? 'sel' : ''}" data-lp="${i}">
       <img src="${esc(p.img)}" alt="" loading="lazy">
-      <div class="lt">${esc(p.titulo.slice(0, 46))}</div>
+      <div class="lt">${esc(p.titulo.slice(0, 40))}${p.artista ? `<span class="la">${esc(p.artista)}</span>` : ''}</div>
       ${sel.has(p.img) ? '<div class="lcheck">✓</div>' : ''}
     </div>`).join('');
+  // artistas: o selecionado + os 14 com mais obras (o resto entra pela busca)
+  const topArt = L.artistas.slice(0, 14);
+  if (L.artista && !topArt.find((a) => a.nome === L.artista)) {
+    const achado = L.artistas.find((a) => a.nome === L.artista);
+    if (achado) topArt.unshift(achado);
+  }
+  const artChips = [
+    `<button class="chip ${!L.artista ? 'on' : ''}" data-art="">todos os artistas</button>`,
+    ...topArt.map((a) => `<button class="chip ${L.artista === a.nome ? 'on' : ''}" data-art="${esc(a.nome)}">${esc(a.nome)} · ${a.n}</button>`),
+  ].join('');
   shell(`
-    <h2 class="view-t">Escolher da loja</h2>
-    <p class="view-sub">Toque nas obras — cada uma vira uma arte do criativo. ${S.mk.artes.length ? `<b>${S.mk.artes.length} selecionada${S.mk.artes.length > 1 ? 's' : ''}</b>.` : ''}</p>
-    <div class="field"><input type="text" id="lj-q" placeholder="buscar por título…" value="${esc(L.busca)}"></div>
+    <h2 class="view-t">🛍 Escolher da loja</h2>
+    <p class="view-sub">Atelier Malta · ${L.total} obra${L.total === 1 ? '' : 's'}${L.artista ? ` de <b>${esc(L.artista)}</b>` : ''}${L.busca ? ` com “${esc(L.busca)}”` : ''}. ${S.mk.artes.length ? `<b>${S.mk.artes.length} selecionada${S.mk.artes.length > 1 ? 's' : ''}</b>.` : 'Toque pra selecionar.'}</p>
+    <div class="field"><input type="text" id="lj-q" placeholder="buscar por obra ou artista…" value="${esc(L.busca)}"></div>
+    <div class="field"><label>Artista</label><div class="chips">${artChips}</div></div>
     ${L.carregando ? '<div class="empty">carregando o catálogo…</div>'
-      : (cells ? `<div class="loja-grid">${cells}</div>` : '<div class="empty">nada encontrado nesta página</div>')}
-    <div class="btnrow" style="margin-top:14px">
-      <button class="btn ghost" id="lj-prev" ${L.page <= 1 ? 'disabled' : ''}>◀ anterior</button>
-      <button class="btn ghost" id="lj-next">próxima ▶</button>
-    </div>
+      : (cells ? `<div class="loja-grid">${cells}</div>` : '<div class="empty">nada encontrado — tente outro termo ou artista</div>')}
+    ${L.paginas > 1 ? `<div class="btnrow" style="margin-top:14px">
+      <button class="btn ghost" id="lj-prev" ${L.page <= 1 ? 'disabled' : ''}>◀</button>
+      <button class="btn ghost" disabled style="flex:0 0 auto;padding:12px 16px">${L.page}/${L.paginas}</button>
+      <button class="btn ghost" id="lj-next" ${L.page >= L.paginas ? 'disabled' : ''}>▶</button>
+    </div>` : ''}
     <div class="spacer"></div>
     <button class="btn" id="lj-ok">Concluir seleção${S.mk.artes.length ? ` (${S.mk.artes.length})` : ''}</button>
   `);
   let t;
-  $('#lj-q').oninput = (e) => { L.busca = e.target.value; clearTimeout(t); t = setTimeout(() => carregaLoja(), 350); };
-  $('#lj-prev').onclick = () => { if (L.page > 1) { L.page -= 1; carregaLoja(); } };
-  $('#lj-next').onclick = () => { L.page += 1; carregaLoja(); };
+  $('#lj-q').oninput = (e) => { L.busca = e.target.value; L.page = 1; clearTimeout(t); t = setTimeout(() => carregaLoja(), 350); };
+  app.querySelectorAll('[data-art]').forEach((b) => b.onclick = () => { L.artista = b.dataset.art; L.page = 1; carregaLoja(); });
+  const pv = $('#lj-prev'); if (pv) pv.onclick = () => { if (L.page > 1) { L.page -= 1; carregaLoja(); } };
+  const nx = $('#lj-next'); if (nx) nx.onclick = () => { if (L.page < L.paginas) { L.page += 1; carregaLoja(); } };
   $('#lj-ok').onclick = () => { S.screen = null; S.tab = 'novo'; render(); };
   app.querySelectorAll('[data-lp]').forEach((el) => el.onclick = () => {
     const p = L.produtos[+el.dataset.lp];
@@ -274,8 +288,11 @@ function viewLoja() {
 async function carregaLoja() {
   S.loja.carregando = true; render();
   try {
-    const r = await api(`loja_produtos&page=${S.loja.page}&q=${encodeURIComponent(S.loja.busca)}`);
+    const r = await api(`loja_produtos&page=${S.loja.page}&q=${encodeURIComponent(S.loja.busca)}&artista=${encodeURIComponent(S.loja.artista)}`);
     S.loja.produtos = r.produtos || [];
+    S.loja.paginas = r.paginas || 1;
+    S.loja.total = r.total || 0;
+    if (r.artistas) S.loja.artistas = r.artistas;
   } catch (e) { toast(e.message, true); }
   S.loja.carregando = false; render();
 }
@@ -586,15 +603,16 @@ function viewNovoErmos(fmtChips, bindFmt) {
   const fundoChips = prontos.map((f) => `<button class="chip ${m.fundoIds.includes(f.id) ? 'on' : ''}" data-fnd="${esc(f.id)}">${esc(f.nome)}</button>`).join('');
   const moldBtns = [['preto', '⬛ Preto'], ['branco', '⬜ Branco'], ['marfim', '🟨 Marfim'], ['arabesco', '👑 Arabesco']]
     .map(([id, lb]) => `<button class="chip ${m.moldura2d === id ? 'on' : ''}" data-m2d="${id}">${lb}</button>`).join('');
-  const ritmoChips = [[0.7, 'rápido 0,7s'], [0.9, 'médio 0,9s'], [1.2, 'calmo 1,2s']]
+  const ritmoChips = [[0.2, '⚡ 0,2s'], [0.3, '0,3s'], [0.5, '0,5s'], [0.8, '0,8s'], [1.2, '🐢 1,2s']]
     .map(([v, lb]) => `<button class="chip ${m.ritmo === v ? 'on' : ''}" data-rit="${v}">${lb}</button>`).join('');
+  const durChipsEr = [6, 8, 10, 15].map((v) => `<button class="chip ${m.duracaoErmos === v ? 'on' : ''}" data-durer="${v}">${v}s</button>`).join('');
   const triChips = TRILHAS.map((t) => `<button class="chip ${m.musica === t ? 'on' : ''}" data-tri="${t}">${t}</button>`).join('');
   const artesHtml = m.artes.map((a, i) => `<div class="arte-th"><img src="${esc(a.prev)}" alt=""><button class="arte-x" data-delarte="${i}">✕</button></div>`).join('');
-  const dur = Math.min(15, Math.max(6, m.artes.length * m.ritmo)).toFixed(1);
+  const trocas = Math.round(m.duracaoErmos / m.ritmo);
   shell(`
     <h2 class="view-t">Novo mockup</h2>
     ${fmtChips}
-    <p class="view-sub">O quadro flutua sobre o lugar, trocando de arte no ritmo do anúncio. ${m.artes.length ? `<b>${m.artes.length} artes ≈ ${dur}s</b> de vídeo.` : 'Sem modelo, sem espera de Veo — sai em segundos.'}</p>
+    <p class="view-sub">O quadro flutua sobre o lugar e as artes se <b>revezam em loop</b>. ${m.artes.length ? `${m.artes.length} artes · <b>${trocas} trocas</b> em ${m.duracaoErmos}s.` : 'Sem modelo, sem espera de Veo — sai em segundos.'}</p>
     <div class="field"><label>Lugar${m.fundoIds.length > 1 ? 'es · ' + m.fundoIds.length : ''} (2+ = o fundo troca durante o vídeo)</label>
       <div class="chips">${fundoChips}</div></div>
     <div class="field"><label>Moldura</label><div class="chips">${moldBtns}</div></div>
@@ -604,7 +622,9 @@ function viewNovoErmos(fmtChips, bindFmt) {
         <button class="btn sm ghost" id="da-loja" style="align-self:center">🛍 da loja</button>
       </div>
     </div>
-    <div class="field"><label>Ritmo da troca</label><div class="chips">${ritmoChips}</div></div>
+    <div class="field"><label>Velocidade da troca</label><div class="chips">${ritmoChips}</div>
+      <div class="hint">tempo que cada arte fica na tela — as artes se revezam do início ao fim</div></div>
+    <div class="field"><label>Duração do vídeo</label><div class="chips">${durChipsEr}</div></div>
     <div class="field"><label>Legenda fixa (embaixo)</label>
       <input type="text" id="er-leg" value="${esc(m.legendaErmos)}"></div>
     <div class="field"><label>Logo no topo (opcional)</label>
@@ -623,6 +643,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
   });
   app.querySelectorAll('[data-m2d]').forEach((b) => b.onclick = () => { m.moldura2d = b.dataset.m2d; render(); });
   app.querySelectorAll('[data-rit]').forEach((b) => b.onclick = () => { m.ritmo = +b.dataset.rit; render(); });
+  app.querySelectorAll('[data-durer]').forEach((b) => b.onclick = () => { m.duracaoErmos = +b.dataset.durer; render(); });
   app.querySelectorAll('[data-tri]').forEach((b) => b.onclick = () => { m.musica = b.dataset.tri; render(); });
   app.querySelectorAll('[data-delarte]').forEach((b) => b.onclick = () => { m.artes.splice(+b.dataset.delarte, 1); render(); });
   $('#er-leg').oninput = (e) => { m.legendaErmos = e.target.value; };
@@ -646,7 +667,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
       await api('queue_ermos', { body: {
         fundoIds: m.fundoIds, moldura: m.moldura2d,
         arteUrls: m.artes.map((a) => a.url),
-        ritmo: m.ritmo, legenda: m.legendaErmos.trim(),
+        ritmo: m.ritmo, duracao: m.duracaoErmos, legenda: m.legendaErmos.trim(),
         logoUrl: m.logoUrl, musica: m.musica,
         formatos: m.fmt45 ? ['9:16', '4:5'] : ['9:16'], nome: '',
       } });

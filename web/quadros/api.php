@@ -194,33 +194,69 @@ if ($action === 'queue_ermos') {
     out(['ok' => true, 'job' => $job]);
 }
 
-// ============ LOJA (picker de artes via products.json da Shopify) ============
+// ============ LOJA (catálogo Shopify: busca + filtro por artista) ============
+// Baixa TODAS as páginas do products.json uma vez e cacheia (o catálogo tem
+// ~2000 obras). `vendor` é o artista (campo limpo da loja). Cache 1h.
+function loja_catalogo(array $CONFIG): array {
+    $cacheFile = DATA . '/loja_catalogo.json';
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < 3600) {
+        $c = json_decode((string)file_get_contents($cacheFile), true);
+        if (is_array($c) && $c) return $c;
+    }
+    $loja = rtrim($CONFIG['defaults']['lojaUrl'] ?? 'https://ateliermalta.com.br', '/');
+    $ctx = stream_context_create(['http' => ['timeout' => 20, 'header' => "User-Agent: QuadrosStudio/1.0\r\n"]]);
+    $todos = [];
+    for ($page = 1; $page <= 40; $page++) { // teto de segurança (40 × 250 = 10k)
+        $raw = @file_get_contents("$loja/products.json?limit=250&page=$page", false, $ctx);
+        if ($raw === false) break;
+        $js = json_decode($raw, true);
+        $lote = $js['products'] ?? [];
+        if (!$lote) break;
+        foreach ($lote as $p) {
+            $img = $p['images'][0]['src'] ?? null;
+            if (!$img) continue;
+            $todos[] = [
+                'titulo' => $p['title'],
+                'img' => $img,
+                'artista' => $p['vendor'] ?? '',
+            ];
+        }
+        if (count($lote) < 250) break;
+    }
+    if ($todos) @file_put_contents($cacheFile, json_encode($todos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    return $todos;
+}
 if ($action === 'loja_produtos') {
     require_login();
-    $loja = rtrim($CONFIG['defaults']['lojaUrl'] ?? 'https://ateliermalta.com.br', '/');
-    $page = max(1, (int)($_GET['page'] ?? 1));
+    $todos = loja_catalogo($CONFIG);
+    if (!$todos) fail('não consegui falar com a loja', 502);
     $q = mb_strtolower(trim($_GET['q'] ?? ''));
-    $cacheFile = DATA . "/loja_cache_$page.json";
-    $dados = null;
-    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < 600) {
-        $dados = json_decode((string)file_get_contents($cacheFile), true);
-    }
-    if (!$dados) {
-        $ctx = stream_context_create(['http' => ['timeout' => 15, 'header' => "User-Agent: QuadrosStudio/1.0\r\n"]]);
-        $raw = @file_get_contents("$loja/products.json?limit=250&page=$page", false, $ctx);
-        if ($raw === false) fail('não consegui falar com a loja', 502);
-        $js = json_decode($raw, true);
-        $dados = [];
-        foreach (($js['products'] ?? []) as $p) {
-            $img = $p['images'][0]['src'] ?? null;
-            if ($img) $dados[] = ['titulo' => $p['title'], 'img' => $img];
-        }
-        @file_put_contents($cacheFile, json_encode($dados, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $artista = trim($_GET['artista'] ?? '');
+    $filtrados = $todos;
+    if ($artista !== '') {
+        $filtrados = array_values(array_filter($filtrados, fn($p) => $p['artista'] === $artista));
     }
     if ($q !== '') {
-        $dados = array_values(array_filter($dados, fn($p) => str_contains(mb_strtolower($p['titulo']), $q)));
+        $filtrados = array_values(array_filter($filtrados, fn($p) =>
+            str_contains(mb_strtolower($p['titulo']), $q) || str_contains(mb_strtolower($p['artista']), $q)));
     }
-    out(['ok' => true, 'produtos' => $dados, 'page' => $page]);
+    // artistas com contagem (do catálogo inteiro, pra lista do filtro)
+    $cont = [];
+    foreach ($todos as $p) {
+        $a = $p['artista'];
+        if ($a !== '') $cont[$a] = ($cont[$a] ?? 0) + 1;
+    }
+    arsort($cont);
+    $artistas = [];
+    foreach ($cont as $nome => $n) $artistas[] = ['nome' => $nome, 'n' => $n];
+    // paginação da UI (60 por vez)
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $porPag = 60;
+    $total = count($filtrados);
+    $pagina = array_slice($filtrados, ($page - 1) * $porPag, $porPag);
+    out(['ok' => true, 'produtos' => array_values($pagina), 'page' => $page,
+         'total' => $total, 'paginas' => max(1, (int)ceil($total / $porPag)),
+         'artistas' => $artistas, 'catalogo' => count($todos)]);
 }
 
 // ============ CATEGORIAS ============

@@ -62,15 +62,16 @@ async function main() {
   const artes = (cfg.artes || []).filter((a) => existsSync(a));
   if (!artes.length) throw new Error('nenhuma arte');
   const moldura = cfg.moldura || 'preto';
-  const ritmo = Math.max(0.5, Number(cfg.ritmo) || 0.9);
+  const ritmo = Math.max(0.15, Number(cfg.ritmo) || 0.4);
   const trocaFundo = Math.max(2, Number(cfg.trocaFundo) || 3.5);
   const slug = path.basename(outputPath, '.mp4');
   const tmpDir = path.join('tmp', `ermos-${slug}`);
   await mkdir(tmpDir, { recursive: true });
   await mkdir(path.dirname(outputPath), { recursive: true });
 
-  // duração: todas as artes desfilam 1x (mín 6s, máx 15s — formato de feed)
-  const T = Math.min(15, Math.max(6, artes.length * ritmo));
+  // duração independente do nº de artes: elas CICLAM em loop durante o vídeo
+  // inteiro (é o que dá o efeito de "desfile" do ad de referência).
+  const T = Math.min(20, Math.max(5, Number(cfg.duracao) || 8));
 
   // 1) monta o quadro 2D de cada arte (produto flutuante)
   console.log(`[1/3] montando ${artes.length} quadro(s) (moldura ${moldura})…`);
@@ -119,11 +120,13 @@ async function main() {
 
   let of = '';
   let cur = '[0:v]';
+  const N = quadros.length;
+  const R = ritmo.toFixed(3);
   quadros.forEach((_, i) => {
-    const ini = (i * ritmo).toFixed(3);
-    const fim = (i === quadros.length - 1 ? T : (i + 1) * ritmo).toFixed(3);
     of += `[${i + 1}:v]scale=760:-1[q${i}];`;
-    of += `${cur}[q${i}]overlay=(W-w)/2:(H-h)/2-40:enable='between(t,${ini},${fim})'[o${i}];`;
+    // ALTERNÂNCIA CÍCLICA: o slot atual é floor(t/ritmo); a arte i aparece
+    // sempre que slot % N == i — as artes se revezam do início ao fim.
+    of += `${cur}[q${i}]overlay=(W-w)/2:(H-h)/2-40:enable='eq(mod(floor(t/${R}),${N}),${i})'[o${i}];`;
     cur = `[o${i}]`;
   });
   if (temLogo) {
