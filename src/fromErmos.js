@@ -27,6 +27,9 @@ import { runFfmpeg, getDurationSeconds, probeWH } from './ffmpeg.js';
 const PY = 'tools/.venv-compose/bin/python';
 const COMPOSE = 'tools/ermos-compose.py';
 const FONTE = '/System/Library/Fonts/Helvetica.ttc';
+// bold só pro nome do artista (o .ttc não expõe o peso pro drawtext)
+const FONTE_BOLD = '/System/Library/Fonts/Supplemental/Arial Bold.ttf';
+const FONTE_PT = 28;
 const LOGO_PADRAO = 'tools/assets/logo-atelier.png'; // Atelier by Malta (SVG do Vitor)
 
 // ZONA DE SEGURANÇA do Reels (canvas 1080x1920):
@@ -202,17 +205,32 @@ async function main() {
     of += `${cur}[lg]overlay=(W-w)/2:${SAFE_TOP + 18}[olg];`;
     cur = '[olg]';
   }
+  // ARTISTA: troca junto com a arte (mesmo enable do overlay). Fica entre o
+  // quadro e a legenda, em bold — é o único elemento em negrito.
+  const artistas = Array.isArray(cfg.artistas) ? cfg.artistas : [];
+  artistas.slice(0, quadros.length).forEach((nome, i) => {
+    const txt = String(nome || '').trim().replace(/[\\:'"%]/g, ' ').slice(0, 42);
+    if (!txt) return;
+    of += `${cur}drawtext=fontfile=${FONTE_BOLD}:text='${txt}':fontcolor=white:fontsize=${FONTE_PT}:`
+        + `shadowcolor=black@0.65:shadowx=1:shadowy=2:x=(w-text_w)/2:y=h-${SAFE_BOTTOM + 92}:`
+        + `enable='eq(mod(floor(t/${R}),${N}),${i})'[a${i}];`;
+    cur = `[a${i}]`;
+  });
   const legenda = (cfg.legenda || 'TODAS AS OBRAS JÁ DISPONÍVEIS EM NOSSO SITE')
     .toUpperCase().replace(/[\\:'"]/g, ' ');
   // baseline do texto acima do limite inferior seguro (h - SAFE_BOTTOM)
-  of += `${cur}drawtext=fontfile=${FONTE}:text='${legenda}':fontcolor=white@0.92:fontsize=26:shadowcolor=black@0.6:shadowx=1:shadowy=1:x=(w-text_w)/2:y=h-${SAFE_BOTTOM + 46}[vt]`;
+  of += `${cur}drawtext=fontfile=${FONTE}:text='${legenda}':fontcolor=white@0.92:fontsize=${FONTE_PT}:shadowcolor=black@0.6:shadowx=1:shadowy=1:x=(w-text_w)/2:y=h-${SAFE_BOTTOM + 46}[vt]`;
   let mapa = ['-map', '[vt]'];
+  // SÓ a trilha escolhida. O áudio do fundo (som ambiente que o Veo gera) NÃO
+  // entra: o criativo tem que sair com exatamente o que ele escolheu. Sem
+  // trilha o vídeo sai mudo — de propósito, é o que "só o que eu escolhi" quer.
   if (musicPath) {
     const mi = quadros.length + (temLogo ? 2 : 1);
-    of += `;[${mi}:a]volume=0.32,afade=t=in:d=1,afade=t=out:st=${Math.max(0, T - 2)}:d=2[mm];[0:a][mm]amix=inputs=2:duration=first,loudnorm=I=-14:TP=-1.5:LRA=11[am]`;
+    of += `;[${mi}:a]afade=t=in:d=1,afade=t=out:st=${Math.max(0, T - 2)}:d=2,`
+        + `loudnorm=I=-14:TP=-1.5:LRA=11[am]`;
     mapa = ['-map', '[vt]', '-map', '[am]'];
   } else {
-    mapa = ['-map', '[vt]', '-map', '0:a'];
+    console.log('  sem trilha escolhida — o vídeo sai mudo (o som do fundo não entra)');
   }
   await runFfmpeg([...oIn, '-filter_complex', of, ...mapa, '-t', String(T),
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19', '-pix_fmt', 'yuv420p',

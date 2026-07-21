@@ -37,32 +37,21 @@ def caminho_asset(nome):
 ASPECT_RETRATO = 0.707    # 1:raiz(2) — reproduz a altura aprovada pelo Vitor
 ASPECT_PAISAGEM = 1.414
 ASPECT_QUADRADO = 1.0
-PP_COR = (238, 240, 242)  # BGR — passe-partout marfim de museu
-PP_MARGEM = 0.05          # margem minima do passe-partout (fracao do menor lado)
 SOMBRA_BLUR = 31        # sombra portada (baked)
 SOMBRA_ALPHA = 110
 SOMBRA_DESLOC = 18
 
 
 def painel(arte, largura, altura):
-    """A ABERTURA da moldura tem sempre este tamanho; a obra entra inteira,
-    centralizada, sobre o passe-partout. Nada de corte, nada de esticao — o
-    que muda entre uma arte e outra e' so' a espessura da margem."""
-    pnl = np.full((altura, largura, 3), PP_COR, np.uint8)
-    m = max(6, int(min(largura, altura) * PP_MARGEM))
-    livre_w, livre_h = largura - 2 * m, altura - 2 * m
+    """A ABERTURA da moldura tem sempre este tamanho e a obra PREENCHE ela
+    inteira: escala pelo lado que falta e apara o excedente pelo centro.
+    Nada de passe-partout e nada de esticao — a obra nunca deforma."""
     ah, aw = arte.shape[:2]
-    k = min(livre_w / aw, livre_h / ah)
-    nw, nh = max(1, int(aw * k)), max(1, int(ah * k))
-    x0, y0 = (largura - nw) // 2, (altura - nh) // 2
-    pnl[y0:y0 + nh, x0:x0 + nw] = cv2.resize(arte, (nw, nh), interpolation=cv2.INTER_AREA)
-    # filete do passe-partout: sem isso a margem parece erro de encaixe
-    cv2.rectangle(pnl, (x0 - 2, y0 - 2), (x0 + nw + 1, y0 + nh + 1), (176, 178, 182), 2)
-    # sombrinha interna: assenta a obra no rebaixo do cartao
-    som = np.zeros((altura, largura), np.float32)
-    cv2.rectangle(som, (x0 - 1, y0 - 1), (x0 + nw, y0 + nh), 1.0, 5)
-    som = cv2.GaussianBlur(som, (0, 0), 3)
-    return np.clip(pnl.astype(np.float32) * (1 - 0.30 * som[..., None]), 0, 255).astype(np.uint8)
+    k = max(largura / aw, altura / ah)          # cobre (nao cabe): sem margem
+    nw, nh = max(largura, int(round(aw * k))), max(altura, int(round(ah * k)))
+    grande = cv2.resize(arte, (nw, nh), interpolation=cv2.INTER_AREA)
+    x0, y0 = (nw - largura) // 2, (nh - altura) // 2
+    return grande[y0:y0 + altura, x0:x0 + largura]
 
 
 def aspecto_padrao(arte):
@@ -125,9 +114,10 @@ def moldura_asset(arte, nome, largura, aspect):
     H = cv2.getPerspectiveTransform(src, quad)
     warp = cv2.warpPerspective(pnl, H, (fr.shape[1], fr.shape[0]), flags=cv2.INTER_LINEAR)
     # o verde some ANTES da composicao: no subpixel da borda o warp nao cobre
-    # 100% do miolo e sobrava um fio verde em volta do passe-partout
+    # 100% do miolo e sobrava um fio verde em volta da arte. Fica a cor media
+    # da propria obra, entao o fio (se sobrar) some dentro dela.
     fr = fr.copy()
-    fr[cv2.dilate(verde, np.ones((5, 5), np.uint8)) > 0] = PP_COR
+    fr[cv2.dilate(verde, np.ones((5, 5), np.uint8)) > 0] = pnl.reshape(-1, 3).mean(0)
     alpha_arte = (cv2.GaussianBlur(verde, (3, 3), 0).astype(np.float32) / 255)[..., None]
     comp = (warp * alpha_arte + fr * (1 - alpha_arte)).astype(np.uint8)
 

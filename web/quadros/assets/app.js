@@ -473,7 +473,7 @@ function viewLoja() {
       return toast(`o vídeo já está com obras ${ORIENT_NOME[t]} — essa é ${ORIENT_NOME[o]}. É um lado só.`, true);
     }
     if (S.mk.artes.length >= 16) return toast('máximo 16 artes', true);
-    S.mk.artes.push({ url: p.img, prev: p.img, orient: o });
+    S.mk.artes.push({ url: p.img, prev: p.img, orient: o, artista: p.artista || '' });
     render();
   });
 }
@@ -908,6 +908,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
       await api('queue_ermos', { body: {
         fundoIds: m.fundoIds, moldura: m.moldura2d,
         arteUrls: m.artes.map((a) => a.url),
+        artistas: m.artes.map((a) => a.artista || ''),
         ritmo: m.ritmo, duracao: m.duracaoErmos, legenda: m.legendaErmos.trim(),
         logoUrl: m.logoUrl, semLogo: !!m.semLogo, musica: m.musica,
         ytId: m.ytId, ytInicio: m.ytInicio,

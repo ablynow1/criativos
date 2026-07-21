@@ -165,10 +165,16 @@ padronizado (as verticais vão de 0,60 a 0,96), então derivar o quadro de cada
 obra fazia a moldura pulsar a cada troca. O `fromErmos` decide **um** aspecto
 pelas artes reais — `0.707` em pé, `1.414` deitado, `1.0` quadrado — e manda o
 mesmo `--aspecto` pra todas: os PNGs saem idênticos ao pixel. Dentro da
-abertura fixa a obra entra **inteira sobre passe-partout** (`painel()` no
-`ermos-compose.py`), com margem mínima de 5% e filete. Cortar as obras pra
-encaixar seria mutilar a pintura — e vender um recorte do que o cliente compra
-inteiro.
+abertura fixa a obra **preenche tudo** (`painel()` no `ermos-compose.py`:
+escala pelo lado que falta e apara o excedente pelo centro). Sem passe-partout
+e sem esticão — a obra nunca deforma, no máximo perde borda.
+
+**Crédito e áudio.** O nome do artista aparece em bold entre o quadro e a
+legenda e **troca junto com a arte** (mesmo `enable` do overlay); vem do
+`vendor` da Shopify, então arte subida à mão sai sem crédito. O áudio é
+**exclusivamente** a trilha escolhida: o som ambiente que o Veo põe no fundo
+não entra na mixagem (`-map [am]` sozinho). Sem trilha, o vídeo sai mudo — de
+propósito.
 
 **As 4 molduras são FOTO das molduras reais** (`tools/assets/moldura-*.png`,
 miolo verde chroma). Nenhuma é desenhada em código: o anúncio mostra a moldura

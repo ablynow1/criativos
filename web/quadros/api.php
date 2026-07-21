@@ -179,6 +179,9 @@ if ($action === 'queue_ermos') {
         'snapshot' => [
             'tipo' => 'ermos', 'fundoIds' => $fundoIds,
             'moldura' => $b['moldura'], 'arteUrls' => $artes,
+            // nome do artista de cada arte, na mesma ordem (vazio = sem crédito)
+            'artistas' => array_map(fn($i) => mb_substr(trim((string)(($b['artistas'][$i] ?? ''))), 0, 42),
+                                    array_keys($artes)),
             'ritmo' => max(0.15, min(2, (float)($b['ritmo'] ?? 0.3))),
             'duracao' => max(5, min(20, (int)($b['duracao'] ?? 8))),
             'legenda' => trim($b['legenda'] ?? ''),

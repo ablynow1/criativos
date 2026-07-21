@@ -255,6 +255,7 @@ async function processErmos(job) {
   }
   const cfg = {
     fundoDirs, artes, logoPath, semLogo: !!snap.semLogo,
+    artistas: Array.isArray(snap.artistas) ? snap.artistas : [],
     moldura: snap.moldura || 'preto',
     ritmo: snap.ritmo || 0.3,
     duracao: snap.duracao || 8,
