@@ -179,7 +179,8 @@ if ($action === 'queue_ermos') {
         'snapshot' => [
             'tipo' => 'ermos', 'fundoIds' => $fundoIds,
             'moldura' => $b['moldura'], 'arteUrls' => $artes,
-            'ritmo' => max(0.5, min(2, (float)($b['ritmo'] ?? 0.9))),
+            'ritmo' => max(0.15, min(2, (float)($b['ritmo'] ?? 0.3))),
+            'duracao' => max(5, min(20, (int)($b['duracao'] ?? 8))),
             'legenda' => trim($b['legenda'] ?? ''),
             'logoUrl' => $b['logoUrl'] ?? null,
             'musica' => $b['musica'] ?? 'nenhuma',

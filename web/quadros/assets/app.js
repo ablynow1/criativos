@@ -546,7 +546,11 @@ function viewNovo() {
     ${umCen && umCen.temAbertura ? `<div class="row"><span class="rl">Abrir com reveal do verso</span><button class="tg ${m.abertura ? 'on' : ''}" id="mk-ab"></button></div>` : ''}
     <div class="spacer"></div>
     ${estouro ? `<div class="hint" style="color:var(--red);margin-bottom:8px">Máximo 20 vídeos por lote — reduza artes ou cenários.</div>` : ''}
-    <button class="btn" id="mk-go" ${m.artes.length && !estouro ? '' : 'disabled'}>Renderizar ${total > 1 ? total + ' vídeos' : 'mockup'}</button>
+    ${m.subindo ? `<div class="subindo">subindo artes… <b>${m.subindo.feitas}/${m.subindo.total}</b>
+      <div class="bar"><i style="width:${Math.round(m.subindo.feitas / m.subindo.total * 100)}%"></i></div></div>` : ''}
+    ${(m.falhas || []).length ? `<div class="falhas">⚠ ${m.falhas.length} arte(s) não subiram:<br>${m.falhas.map((f) => esc(f)).join('<br>')}</div>` : ''}
+    <button class="btn" id="mk-go" ${m.artes.length && !estouro && !m.subindo ? '' : 'disabled'}>${
+      m.subindo ? `aguarde… ${m.subindo.feitas}/${m.subindo.total}` : `Renderizar ${total > 1 ? total + ' vídeos' : 'mockup'}`}</button>
   `);
   bindFmt();
   app.querySelectorAll('[data-cen]').forEach((b) => b.onclick = () => {
@@ -633,7 +637,12 @@ function viewNovoErmos(fmtChips, bindFmt) {
     <div class="field"><label>Trilha musical</label><div class="chips">${triChips}</div></div>
     <div class="row"><span class="rl">Exportar também 4:5 (feed do Meta)</span><button class="tg ${m.fmt45 ? 'on' : ''}" id="mk-45"></button></div>
     <div class="spacer"></div>
-    <button class="btn" id="er-go" ${m.artes.length ? '' : 'disabled'}>Renderizar criativo Ermos</button>
+    ${m.subindo ? `<div class="subindo">subindo artes… <b>${m.subindo.feitas}/${m.subindo.total}</b>
+      <div class="bar"><i style="width:${Math.round(m.subindo.feitas / m.subindo.total * 100)}%"></i></div></div>` : ''}
+    ${(m.falhas || []).length ? `<div class="falhas">⚠ ${m.falhas.length} arte(s) não subiram:<br>${m.falhas.map((f) => esc(f)).join('<br>')}</div>` : ''}
+    <button class="btn" id="er-go" ${m.artes.length && !m.subindo ? '' : 'disabled'}>${
+      m.subindo ? `aguarde… ${m.subindo.feitas}/${m.subindo.total}`
+      : `Renderizar${m.artes.length ? ` · ${m.artes.length} arte${m.artes.length > 1 ? 's' : ''}` : ''}`}</button>
   `);
   bindFmt();
   app.querySelectorAll('[data-fnd]').forEach((b) => b.onclick = () => {
@@ -682,17 +691,29 @@ function pickArtes() {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp'; inp.multiple = true;
   inp.onchange = async () => {
-    const files = [...inp.files].slice(0, 10 - S.mk.artes.length);
-    if (!files.length) return;
-    toast(`subindo ${files.length} arte${files.length > 1 ? 's' : ''}…`);
+    const livres = 16 - S.mk.artes.length;
+    const todos = [...inp.files];
+    const files = todos.slice(0, livres);
+    if (!files.length) return toast('limite de 16 artes atingido', true);
+    if (todos.length > files.length) toast(`só cabem mais ${livres} artes — ${todos.length - files.length} ignoradas`, true);
+    // trava o Renderizar enquanto sobe (senão clicar cedo manda só as prontas)
+    S.mk.subindo = { feitas: 0, total: files.length };
+    S.mk.falhas = [];
+    render();
     for (const f of files) {
       const fd = new FormData(); fd.append('file', f);
       try {
         const r = await api('upload_image', { form: fd });
         S.mk.artes.push({ url: r.url, prev: URL.createObjectURL(f) });
-      } catch (e) { toast(`${f.name}: ${e.message}`, true); }
+      } catch (e) { S.mk.falhas.push(`${f.name}: ${e.message}`); }
+      S.mk.subindo.feitas += 1;
+      render(); // barra de progresso viva
     }
+    const falhas = S.mk.falhas;
+    S.mk.subindo = null;
     render();
+    if (falhas.length) toast(`${falhas.length} arte(s) falharam — veja o aviso vermelho`, true);
+    else toast(`${files.length} arte${files.length > 1 ? 's' : ''} pronta${files.length > 1 ? 's' : ''} ✓`);
   };
   inp.click();
 }

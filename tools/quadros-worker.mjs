@@ -256,7 +256,8 @@ async function processErmos(job) {
   const cfg = {
     fundoDirs, artes, logoPath,
     moldura: snap.moldura || 'preto',
-    ritmo: snap.ritmo || 0.9,
+    ritmo: snap.ritmo || 0.3,
+    duracao: snap.duracao || 8,
     legenda: snap.legenda || '',
     musica: snap.musica || 'nenhuma',
     formatos: Array.isArray(snap.formatos) ? snap.formatos : ['9:16'],

@@ -176,6 +176,13 @@ nav.tabs button.on { background:var(--gold); color:#1a1206; }
 .loja-item .lcheck { position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%;
   background:var(--gold); color:#1a1206; font-weight:700; font-size:13px; display:grid; place-items:center; }
 
+/* progresso de upload / falhas */
+.subindo { background:var(--surface); border:1px solid var(--gold); border-radius:11px;
+  padding:12px 14px; margin-bottom:12px; font-size:14px; }
+.subindo .bar { margin-top:8px; }
+.falhas { background:var(--surface); border-left:3px solid var(--red); border-radius:9px;
+  padding:11px 13px; margin-bottom:12px; font-size:13px; color:var(--red); line-height:1.5; }
+
 /* downloads na galeria */
 .gdl { display:flex; gap:12px; margin-top:5px; }
 .gdl a { font-size:12.5px; font-weight:600; color:var(--gold); text-decoration:none;
