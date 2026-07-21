@@ -180,6 +180,12 @@ nav.tabs button.on { background:var(--gold); color:#1a1206; }
 .arte-o { position:absolute; bottom:-3px; left:-4px; line-height:1;
   padding:3px 4px; border-radius:5px; background:var(--bg); color:var(--gold); border:1px solid var(--line-2); }
 /* retângulo desenhado: glifo de caixa não existe em toda fonte (virava tofu) */
+/* painel "refazer" dentro do card do job pronto */
+.refazer { border:1px solid var(--gold); border-radius:11px; padding:11px 12px 12px;
+  margin:10px 0 4px; background:#ffffff06; }
+.refazer .field { margin-bottom:9px; }
+.refazer .field:last-of-type { margin-bottom:6px; }
+.refazer .hint { margin:0 0 9px; }
 .oi { display:inline-block; border:1.5px solid currentColor; border-radius:2px; vertical-align:-1px; }
 .oi.v { width:8px; height:11px; }
 .oi.h { width:12px; height:8px; }

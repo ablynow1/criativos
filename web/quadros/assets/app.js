@@ -7,6 +7,7 @@ const app = $('#app');
 
 const S = {
   auth: false, tab: 'cenarios', screen: null, catFiltro: null, // null = home (pastas)
+  refazer: null, // painel "refazer com outra moldura/lugar" aberto num job
   cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
   loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], orient: '', orientacoes: null, carregando: false, completo: true },
   yt: { busca: '', videos: [], sel: null, inicio: 0, carregando: false },
@@ -965,6 +966,26 @@ function pickArtes() {
 }
 
 // ---------- FILA ----------
+// REFAZER: o mesmo criativo com outra moldura e/ou outro lugar. Abre já
+// marcado no que ele usou — trocar uma coisa é um toque e confirmar.
+function refazerHtml(j) {
+  const R = S.refazer;
+  if (!R || R.id !== j.id) return '';
+  const prontos = S.fundos.filter((f) => f.status === 'pronto');
+  const molBtns = MOLDURAS_PRESET.map(([id, nome]) =>
+    `<button class="chip ${R.moldura === id ? 'on' : ''}" data-rf-mol="${id}">${nome}</button>`).join('');
+  const lugBtns = prontos.map((f) =>
+    `<button class="chip ${R.fundoIds.includes(f.id) ? 'on' : ''}" data-rf-fun="${esc(f.id)}">${esc(f.nome)}</button>`).join('');
+  const mudou = R.moldura !== R.origMoldura || R.fundoIds.join() !== R.origFundos.join();
+  return `<div class="refazer">
+    <div class="field"><label>Moldura</label><div class="chips">${molBtns}</div></div>
+    <div class="field"><label>Lugar${R.fundoIds.length > 1 ? ' (troca durante o vídeo)' : ''}</label>
+      <div class="chips">${lugBtns || '<span class="hint">nenhum lugar ativado ainda</span>'}</div></div>
+    <div class="hint">As mesmas ${(j.snapshot?.arteUrls || []).length} artes, mesmo ritmo, mesma trilha.</div>
+    <button class="btn sm" id="rf-go" ${mudou ? '' : 'disabled'}>${mudou ? 'Refazer com estas mudanças' : 'mude a moldura ou o lugar'}</button>
+  </div>`;
+}
+
 function viewFila() {
   const jobs = S.jobs;
   const rows = jobs.map((j) => {
@@ -987,7 +1008,9 @@ function viewFila() {
           ${j.video45 ? `<a href="${esc(j.video45)}" download>⬇ 4:5 feed</a>` : ''}
         </div>
       </div>` : ''}
+      ${refazerHtml(j)}
       <div class="jactions">
+        ${j.tipo === 'ermos' && j.status === 'done' ? `<button class="btn sm ghost" data-refazer="${esc(j.id)}">${S.refazer && S.refazer.id === j.id ? 'fechar' : '↻ Refazer'}</button>` : ''}
         ${j.status === 'error' ? `<button class="btn sm ghost" data-retry="${esc(j.id)}">Tentar de novo</button>` : ''}
         ${['queued', 'claimed', 'running'].includes(j.status) ? `<button class="btn sm ghost" data-cancel="${esc(j.id)}">Cancelar</button>` : ''}
         ${['done', 'error'].includes(j.status) ? `<button class="btn sm danger" data-djob="${esc(j.id)}">Apagar</button>` : ''}
@@ -1002,6 +1025,32 @@ function viewFila() {
   app.querySelectorAll('[data-cancel]').forEach((b) => b.onclick = () => act('cancel', b.dataset.cancel));
   app.querySelectorAll('[data-djob]').forEach((b) => b.onclick = () => act('delete', b.dataset.djob));
   app.querySelectorAll('[data-goto-cen]').forEach((b) => b.onclick = () => { S.tab = 'cenarios'; render(); });
+  app.querySelectorAll('[data-refazer]').forEach((b) => b.onclick = () => {
+    const id = b.dataset.refazer;
+    if (S.refazer && S.refazer.id === id) { S.refazer = null; return render(); }
+    const j = S.jobs.find((x) => x.id === id);
+    const s = j.snapshot || {};
+    S.refazer = { id, moldura: s.moldura, fundoIds: [...(s.fundoIds || [])],
+      origMoldura: s.moldura, origFundos: [...(s.fundoIds || [])] };
+    render();
+  });
+  app.querySelectorAll('[data-rf-mol]').forEach((b) => b.onclick = () => { S.refazer.moldura = b.dataset.rfMol; render(); });
+  app.querySelectorAll('[data-rf-fun]').forEach((b) => b.onclick = () => {
+    const F = S.refazer.fundoIds; const i = F.indexOf(b.dataset.rfFun);
+    if (i >= 0) { if (F.length === 1) return toast('deixe ao menos um lugar', true); F.splice(i, 1); }
+    else F.push(b.dataset.rfFun);
+    render();
+  });
+  const rf = $('#rf-go');
+  if (rf) rf.onclick = async () => {
+    const R = S.refazer;
+    rf.disabled = true; rf.textContent = 'enfileirando…';
+    try {
+      const r = await api('requeue_ermos', { body: { id: R.id, moldura: R.moldura, fundoIds: R.fundoIds } });
+      S.refazer = null; await refresh();
+      toast(`refazendo com ${r.mudou.join(' + ')} ↻`);
+    } catch (e) { toast(e.message, true); render(); }
+  };
 }
 
 // ---------- GALERIA ----------

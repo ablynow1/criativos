@@ -145,6 +145,26 @@ narração TTS (Neural2 com timestamps por palavra), trilha Lyria (moods em
 mix simples com fade. `formatos: ['9:16','4:5']` exporta também o center-crop
 1080x1350 pro feed.
 
+## 5.6 Ermos: lugares e o "refazer"
+
+**Lugares** (`src/fundos.js`, 16 presets): 8 externos de luxo + 8 **interiores
+de casa** cujo eixo de variação é justamente serem incomparáveis entre si —
+época, paleta, material da parede, piso e principalmente a *qualidade da luz*
+(dura recortada, difusa sem sombra, high key, low key de lareira, noturna).
+Todo preset de interior herda `BASE_INT`, que exige **parede central vazia** (o
+quadro flutua ali) e móveis baixos nas laterais.
+
+O keyframe é gerado uma vez por `tools/fundo-keyframes.mjs`, que grava em
+`output/quadros/fundos/<id>/keyframe.png` (**o mesmo caminho que o
+`fromFundo.js` procura**) e publica a thumb em `web/quadros/assets/fundos/`.
+Sem isso o preview seria uma imagem e o vídeo outra. O manifest é sempre
+derivado do `FUNDOS` — nunca editado à mão.
+
+**Refazer** (`requeue_ermos`): clona um Ermos pronto trocando só a moldura
+e/ou os lugares; artes, ritmo, duração, trilha e legenda vêm do snapshot
+original. É o jeito barato de comparar variações do mesmo criativo — não passa
+por Veo, roda em ~1 min.
+
 ## 6. Como adicionar um cenário novo
 
 1. Descreve avatar + ambiente + moldura (texto livre).

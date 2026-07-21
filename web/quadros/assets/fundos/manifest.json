@@ -1,42 +1,82 @@
 [
- {
-  "id": "marina-luxo",
-  "nome": "Marina de luxo",
-  "hint": "iates, palmeiras, carros — o cenário do ad original"
- },
- {
-  "id": "amalfi",
-  "nome": "Costa Amalfitana",
-  "hint": "Positano — casas pastel no penhasco sobre o mar"
- },
- {
-  "id": "santorini",
-  "nome": "Santorini",
-  "hint": "branco e azul grego sobre a caldeira"
- },
- {
-  "id": "toscana",
-  "nome": "Toscana",
-  "hint": "ciprestes e colinas douradas"
- },
- {
-  "id": "museu",
-  "nome": "Museu clássico",
-  "hint": "salão de mármore com colunas"
- },
- {
-  "id": "como",
-  "nome": "Lago de Como",
-  "hint": "lago alpino, vilas e montanhas"
- },
- {
-  "id": "riviera",
-  "nome": "Riviera Francesa",
-  "hint": "porto estilo Mônaco ao entardecer"
- },
- {
-  "id": "grecia-antiga",
-  "nome": "Grécia antiga",
-  "hint": "ruínas de templo em luz dourada"
- }
+  {
+    "id": "marina-luxo",
+    "nome": "Marina de luxo",
+    "hint": "iates, palmeiras, carros — o cenário do ad original"
+  },
+  {
+    "id": "amalfi",
+    "nome": "Costa Amalfitana",
+    "hint": "Positano — casas pastel no penhasco sobre o mar"
+  },
+  {
+    "id": "santorini",
+    "nome": "Santorini",
+    "hint": "branco e azul grego sobre a caldeira"
+  },
+  {
+    "id": "toscana",
+    "nome": "Toscana",
+    "hint": "ciprestes e colinas douradas"
+  },
+  {
+    "id": "museu",
+    "nome": "Museu clássico",
+    "hint": "salão de mármore com colunas"
+  },
+  {
+    "id": "como",
+    "nome": "Lago de Como",
+    "hint": "lago alpino, vilas e montanhas"
+  },
+  {
+    "id": "riviera",
+    "nome": "Riviera Francesa",
+    "hint": "porto estilo Mônaco ao entardecer"
+  },
+  {
+    "id": "grecia-antiga",
+    "nome": "Grécia antiga",
+    "hint": "ruínas de templo em luz dourada"
+  },
+  {
+    "id": "loft-industrial",
+    "nome": "Loft industrial",
+    "hint": "tijolo aparente e janela de aço — luz dura e recortada"
+  },
+  {
+    "id": "japandi",
+    "nome": "Japandi minimalista",
+    "hint": "microcimento e carvalho claro — luz difusa de shoji, sem sombra"
+  },
+  {
+    "id": "paris-haussmann",
+    "nome": "Clássico parisiense",
+    "hint": "parquet espinha e boiserie — sol rasante da tarde"
+  },
+  {
+    "id": "escandinavo",
+    "nome": "Escandinavo claro",
+    "hint": "branco e bétula — luz fria de janela norte, quase sem sombra"
+  },
+  {
+    "id": "mid-century",
+    "nome": "Mid-century anos 60",
+    "hint": "nogueira e terracota — persiana ripada, sol baixo listrado"
+  },
+  {
+    "id": "mediterraneo",
+    "nome": "Mediterrâneo boho",
+    "hint": "arcos de reboco e terracota — sol quente em manchas"
+  },
+  {
+    "id": "biblioteca-escura",
+    "nome": "Biblioteca escura",
+    "hint": "verde profundo e mogno — luz baixa de abajur e lareira"
+  },
+  {
+    "id": "penthouse-noite",
+    "nome": "Penthouse à noite",
+    "hint": "vidro do chão ao teto e mármore preto — cidade acesa lá fora"
+  }
 ]

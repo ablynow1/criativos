@@ -198,6 +198,52 @@ if ($action === 'queue_ermos') {
     out(['ok' => true, 'job' => $job]);
 }
 
+// REFAZER: clona um Ermos pronto trocando SÓ a moldura e/ou os lugares. Tudo
+// o mais (artes, ritmo, duração, trilha, legenda, logo) vem do original — a
+// graça é comparar variações do mesmo criativo sem remontar nada na mão.
+if ($action === 'requeue_ermos') {
+    require_login(); require_csrf();
+    $b = body();
+    $jobs = jread('jobs', []);
+    $orig = null;
+    foreach ($jobs as $j) if ($j['id'] === ($b['id'] ?? '')) { $orig = $j; break; }
+    if (!$orig || ($orig['snapshot']['tipo'] ?? '') !== 'ermos') fail('criativo Ermos não encontrado');
+    $snap = $orig['snapshot'];
+    $mudou = [];
+
+    $moldura = $b['moldura'] ?? '';
+    if ($moldura !== '' && $moldura !== ($snap['moldura'] ?? '')) {
+        if (!in_array($moldura, ['preto', 'branco', 'marfim', 'arabesco'], true)) fail('moldura inválida');
+        $snap['moldura'] = $moldura;
+        $mudou[] = 'moldura ' . $moldura;
+    }
+    if (!empty($b['fundoIds']) && is_array($b['fundoIds'])) {
+        $novos = array_values(array_filter($b['fundoIds']));
+        $prontos = [];
+        foreach (fundos_com_status() as $f) if ($f['status'] === 'pronto') $prontos[$f['id']] = $f['nome'];
+        foreach ($novos as $fid) if (!isset($prontos[$fid])) fail("o lugar $fid ainda não está pronto");
+        if ($novos && $novos !== ($snap['fundoIds'] ?? [])) {
+            $snap['fundoIds'] = $novos;
+            $mudou[] = count($novos) === 1 ? $prontos[$novos[0]] : count($novos) . ' lugares';
+        }
+    }
+    if (!$mudou) fail('mude a moldura ou o lugar — senão sai igualzinho');
+
+    // nome enxuto: original sem o "(refeito: …)" antigo + o que mudou agora
+    $baseNome = preg_replace('/\s*\(refeito:.*\)$/u', '', (string)$orig['nome']);
+    $job = [
+        'id' => rid('job_'), 'tipo' => 'ermos',
+        'nome' => $baseNome . ' (refeito: ' . implode(' + ', $mudou) . ')',
+        'snapshot' => $snap,
+        'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
+        'video' => null, 'video45' => null, 'error' => null,
+        'created_at' => now(), 'updated_at' => now(),
+    ];
+    array_unshift($jobs, $job);
+    jwrite('jobs', $jobs);
+    out(['ok' => true, 'job' => $job, 'mudou' => $mudou]);
+}
+
 // ============ LOJA (catálogo Shopify: busca + filtro por artista) ============
 // Baixa TODAS as páginas do products.json uma vez e cacheia (o catálogo tem
 // ~2000 obras). `vendor` é o artista (campo limpo da loja). Cache 1h.
