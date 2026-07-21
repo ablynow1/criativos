@@ -30,6 +30,19 @@ export async function getDurationSeconds(filePath) {
   return parseFloat(stdout.trim());
 }
 
+/** Largura x altura de uma imagem/vídeo, em pixels. */
+export async function probeWH(filePath) {
+  const { stdout } = await execFileAsync(FFPROBE_BIN, [
+    '-v', 'error',
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=width,height',
+    '-of', 'csv=p=0',
+    filePath,
+  ]);
+  const [w, h] = stdout.trim().split(',').map(Number);
+  return { w, h };
+}
+
 /** True se o arquivo tem pelo menos uma faixa de áudio. */
 export async function hasAudioStream(filePath) {
   const { stdout } = await execFileAsync(FFPROBE_BIN, [

@@ -300,8 +300,10 @@ async function sincronizaCatalogo() {
       if (!r.ok) break;
       const lote = (await r.json()).products || [];
       for (const p of lote) {
-        const img = p.images?.[0]?.src;
-        if (img) todos.push({ titulo: p.title, img, artista: p.vendor || '' });
+        const im = p.images?.[0];
+        // w/h vêm da Shopify: é assim que o painel sabe se a obra é em pé ou
+        // deitada SEM baixar a imagem (o Vitor nunca mistura as duas num vídeo)
+        if (im?.src) todos.push({ titulo: p.title, img: im.src, artista: p.vendor || '', w: im.width || 0, h: im.height || 0 });
       }
       if (lote.length < 250) break;
     }

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { generateMusic } from './musicGen.js';
-import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
+import { runFfmpeg, getDurationSeconds, probeWH } from './ffmpeg.js';
 
 /**
  * Motor de MOCKUP ERMOS — réplica estrutural do ad 3981810798791050:
@@ -35,11 +35,16 @@ const LOGO_PADRAO = 'tools/assets/logo-atelier.png'; // Atelier by Malta (SVG do
 const SAFE_TOP = 220;
 const SAFE_BOTTOM = 450;
 const CAPA_H = 1440;
+const CANVAS_H = 1920;
 const LOGO_W = 300;
-// o quadro vive entre a logo e a legenda, centrado na área da CAPA
+// EM PÉ: quadro alto, vive entre a logo e a legenda, centrado na área da CAPA
+// (é o que aparece na capa do Reels no perfil).
 const QUADRO_W = 700;
 const QUADRO_H = Math.round(QUADRO_W * 4 / 3); // ~933 (proporção 3:4 + sombra)
 const QUADRO_Y = Math.round((CAPA_H + SAFE_TOP + 110 - QUADRO_H) / 2);
+// DEITADO: com a mesma largura ficaria baixinho e colado na logo, sobrando
+// meio criativo vazio embaixo. Então alarga e desce pro centro do criativo.
+const QUADRO_W_H = 880;
 
 function parseArgs(argv) {
   const args = {};
@@ -89,11 +94,27 @@ async function main() {
   // 1) monta o quadro 2D de cada arte (produto flutuante)
   console.log(`[1/3] montando ${artes.length} quadro(s) (moldura ${moldura})…`);
   const quadros = [];
+  const medidas = [];
   for (let i = 0; i < artes.length; i += 1) {
     const q = path.join(tmpDir, `quadro-${i}.png`);
     await run(PY, [COMPOSE, '--arte', artes[i], '--moldura', moldura, '--out', q, '--largura', '860']);
     quadros.push(q);
+    medidas.push(await probeWH(q));
   }
+  // O quadro montado herda a orientação da arte (quem faz isso é o
+  // ermos-compose). Medimos o PNG pronto — é a verdade do que vai pra tela,
+  // não o que a UI achou que era. Um vídeo é sempre de um lado só; se vier
+  // misturado, vale a maioria e fica o aviso no log.
+  const lados = medidas.map((m) => (m.w > m.h ? 'h' : 'v'));
+  const deitado = lados.filter((l) => l === 'h').length > lados.length / 2;
+  if (new Set(lados).size > 1) {
+    console.error(`  ⚠️ artes misturadas (${lados.join(',')}) — usando o layout ${deitado ? 'deitado' : 'em pé'}. Use um lado só.`);
+  }
+  const larguraQ = deitado ? QUADRO_W_H : QUADRO_W;
+  const alturaQ = Math.round(larguraQ * medidas[0].h / medidas[0].w);
+  // deitado: centro do criativo inteiro (1920). em pé: centro da capa (1440).
+  const quadroY = deitado ? Math.round((CANVAS_H - alturaQ) / 2) : QUADRO_Y;
+  console.log(`  quadro ${deitado ? 'deitado' : 'em pé'}: ${larguraQ}x${alturaQ} em y=${quadroY}`);
 
   // 2) base: fundos em sequência (ciclando) até cobrir T
   console.log('[2/3] montando a base de fundos…');
@@ -161,10 +182,10 @@ async function main() {
   // a UI do Instagram cobre o topo (220px) e o rodapé (450px). Além disso os
   // 1080x1440 de cima são a CAPA do Reels no perfil — o quadro mora aí.
   quadros.forEach((_, i) => {
-    of += `[${i + 1}:v]scale=${QUADRO_W}:-1[q${i}];`;
+    of += `[${i + 1}:v]scale=${larguraQ}:-1[q${i}];`;
     // ALTERNÂNCIA CÍCLICA: o slot atual é floor(t/ritmo); a arte i aparece
     // sempre que slot % N == i — as artes se revezam do início ao fim.
-    of += `${cur}[q${i}]overlay=(W-w)/2:${QUADRO_Y}:enable='eq(mod(floor(t/${R}),${N}),${i})'[o${i}];`;
+    of += `${cur}[q${i}]overlay=(W-w)/2:${quadroY}:enable='eq(mod(floor(t/${R}),${N}),${i})'[o${i}];`;
     cur = `[o${i}]`;
   });
   if (temLogo) {

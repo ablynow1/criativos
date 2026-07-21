@@ -8,7 +8,7 @@ const app = $('#app');
 const S = {
   auth: false, tab: 'cenarios', screen: null, catFiltro: null, // null = home (pastas)
   cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
-  loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], carregando: false, completo: true },
+  loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], orient: '', orientacoes: null, carregando: false, completo: true },
   yt: { busca: '', videos: [], sel: null, inicio: 0, carregando: false },
   // form do mockup (artes = lote [{url,prev}]; cenarioIds = pool multi-select)
   mk: { formato: 'ugc', cenarioIds: [], artes: [], modo: 'sortear', movimento: 'medio', duracaoAlvo: 25, abertura: false,
@@ -269,12 +269,14 @@ function viewYoutube() {
       <div class="hint">Use trilhas que você tem direito de usar (royalty-free, sua própria ou licenciada) — anúncio com música de terceiros pode ser derrubado por direitos autorais.</div>
     </div>
     ${Y.sel ? `<div class="yt-player">
-      <div id="yt-frame"></div>
+      <iframe id="yt-frame" allow="autoplay; encrypted-media" allowfullscreen
+        src="${ytEmbedUrl(Y.sel.id, Y.inicio)}"></iframe>
       <div class="yt-marca">
         <div class="yt-marca-l">início: <b id="yt-ini">${fmtT(Y.inicio)}</b> → ${fmtT(Y.inicio + dur)}</div>
         <button class="btn sm" id="yt-aqui">marcar aqui ⏱</button>
       </div>
       <input type="range" id="yt-range" min="0" max="${Math.max(0, Y.sel.dur - dur)}" value="${Y.inicio}" step="1">
+      <button class="btn ghost" id="yt-ouvir">▶ ouvir os ${dur}s deste trecho</button>
       <button class="btn" id="yt-ok">Usar esta trilha</button>
     </div>` : ''}
     ${Y.carregando ? '<div class="empty">buscando…</div>' : (cells ? `<div class="yt-grid">${cells}</div>` : '')}
@@ -288,7 +290,7 @@ function viewYoutube() {
     Y.sel = Y.videos[+el.dataset.ytv]; Y.inicio = 0; render();
   });
   if (Y.sel) {
-    montaPlayerYt(Y.sel.id, Y.inicio);
+    ligaPonteYt();
     // NADA aqui pode chamar render(): recriar o #yt-frame mata o player e
     // reinicia a música no meio da escuta. Atualizamos o DOM na mão.
     const pintaInicio = () => {
@@ -299,12 +301,19 @@ function viewYoutube() {
     };
     const r = $('#yt-range');
     r.oninput = (e) => { Y.inicio = +e.target.value; pintaInicio(); };
-    r.onchange = () => { if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(Y.inicio, true); };
+    // arrastar já pula o áudio pra lá: ele ouve enquanto procura o ponto
+    r.onchange = () => { ytCmd('seekTo', [Y.inicio, true]); ytCmd('playVideo'); ytPara = 0; };
     $('#yt-aqui').onclick = () => {
-      if (!ytPlayer || !ytPlayer.getCurrentTime) return toast('espere o player carregar', true);
-      Y.inicio = Math.max(0, Math.min(Math.round(ytPlayer.getCurrentTime()), Math.max(0, Y.sel.dur - dur)));
+      if (ytTempo() === null) return toast('dê play no player primeiro', true);
+      Y.inicio = Math.max(0, Math.min(Math.round(ytTempo()), Math.max(0, Y.sel.dur - dur)));
       r.value = Y.inicio; pintaInicio();
       toast(`trecho começa em ${fmtT(Y.inicio)}`);
+    };
+    // toca só a janela que vai virar trilha, e para sozinho no fim dela
+    $('#yt-ouvir').onclick = () => {
+      ytCmd('seekTo', [Y.inicio, true]); ytCmd('playVideo');
+      ytPara = Y.inicio + dur;
+      toast(`ouvindo ${fmtT(Y.inicio)} → ${fmtT(Y.inicio + dur)}`);
     };
     $('#yt-ok').onclick = () => {
       S.mk.ytId = Y.sel.id; S.mk.ytTitulo = Y.sel.titulo; S.mk.ytInicio = Y.inicio;
@@ -314,21 +323,59 @@ function viewYoutube() {
   }
 }
 
-let ytPlayer = null;
-function montaPlayerYt(id, inicio) {
-  const cria = () => {
-    ytPlayer = new YT.Player('yt-frame', {
-      height: '200', width: '100%', videoId: id,
-      playerVars: { start: inicio, rel: 0, modestbranding: 1 },
-    });
-  };
-  if (window.YT && window.YT.Player) return cria();
-  if (!document.querySelector('#yt-api')) {
-    const s = document.createElement('script');
-    s.id = 'yt-api'; s.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(s);
-  }
-  window.onYouTubeIframeAPIReady = cria;
+// ---------- PONTE COM O PLAYER DO YOUTUBE ----------
+// Nada de iframe_api.js: a CSP do site é `script-src 'self'` e não vamos
+// afrouxar isso. Falamos direto com o iframe pelo protocolo postMessage que a
+// própria API usa por baixo — mesmo poder (seek, play, tempo atual), zero
+// script de terceiro. Só o frame-src precisou ser liberado (ver .htaccess).
+const YT_ORIGEM = 'https://www.youtube-nocookie.com';
+let ytUlt = null;   // { t: segundos, quando: Date.now(), tocando: bool }
+let ytPara = 0;     // pausa automática ao chegar aqui (0 = desligado)
+let ytPonte = false;
+
+function ytEmbedUrl(id, inicio) {
+  const p = new URLSearchParams({
+    enablejsapi: '1', start: String(Math.max(0, inicio | 0)), rel: '0',
+    modestbranding: '1', playsinline: '1', origin: location.origin,
+  });
+  return `${YT_ORIGEM}/embed/${encodeURIComponent(id)}?${p}`;
+}
+
+function ytCmd(func, args = []) {
+  const f = $('#yt-frame');
+  if (!f || !f.contentWindow) return;
+  f.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), YT_ORIGEM);
+}
+
+// tempo atual estimado: o YouTube manda o relógio a cada ~250ms; entre um
+// aviso e outro a gente extrapola, senão o "marcar aqui" ficaria atrasado
+function ytTempo() {
+  if (!ytUlt) return null;
+  if (!ytUlt.tocando) return ytUlt.t;
+  return ytUlt.t + (Date.now() - ytUlt.quando) / 1000;
+}
+
+function ligaPonteYt() {
+  ytUlt = null; ytPara = 0;
+  const f = $('#yt-frame');
+  // handshake: sem isso o YouTube não manda os infoDelivery com o tempo
+  if (f) f.onload = () => f.contentWindow.postMessage(
+    JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), YT_ORIGEM);
+  if (ytPonte) return;
+  ytPonte = true;
+  window.addEventListener('message', (e) => {
+    if (e.origin !== YT_ORIGEM) return;
+    let d; try { d = JSON.parse(e.data); } catch { return; }
+    const info = d && d.info;
+    if (!info) return;
+    if (typeof info.currentTime === 'number') {
+      ytUlt = { t: info.currentTime, quando: Date.now(), tocando: info.playerState === 1 };
+    } else if (typeof info.playerState === 'number' && ytUlt) {
+      ytUlt = { t: ytTempo(), quando: Date.now(), tocando: info.playerState === 1 };
+    }
+    // fim da janela em audição → pausa (ele ouve só o que vai virar trilha)
+    if (ytPara && ytUlt && ytUlt.tocando && ytUlt.t >= ytPara) { ytPara = 0; ytCmd('pauseVideo'); }
+  });
 }
 
 async function buscaYt() {
@@ -342,15 +389,40 @@ async function buscaYt() {
 }
 
 // ---------- LOJA (picker de artes do catálogo Shopify) ----------
+// ORIENTAÇÃO: o vídeo é sempre de um lado só — ou tudo em pé, ou tudo deitado.
+// Misturar quebra a composição (a moldura e a posição no criativo mudam).
+const ORIENT_NOME = { v: 'em pé', h: 'deitada', q: 'quadrada' };
+// ícone desenhado em CSS: os glifos de retângulo (▯ ▭ ▢) não existem em toda
+// fonte e viravam quadradinho vazio no iPhone
+const ORIENT_ICO = { v: '<i class="oi v"></i>', h: '<i class="oi h"></i>', q: '<i class="oi q"></i>' };
+// a orientação travada pelo que já está escolhido ('' = ainda livre).
+// quadrada não trava nada: cabe nos dois.
+function orientTravada() {
+  const o = S.mk.artes.map((a) => a.orient).find((x) => x === 'v' || x === 'h');
+  return o || '';
+}
+
 function viewLoja() {
   const L = S.loja;
   const sel = new Set(S.mk.artes.map((a) => a.url));
-  const cells = L.produtos.map((p, i) => `
-    <div class="loja-item ${sel.has(p.img) ? 'sel' : ''}" data-lp="${i}">
+  const trava = orientTravada();
+  const cells = L.produtos.map((p, i) => {
+    const o = p.orient || 'v';
+    const bloqueada = trava && o !== 'q' && o !== trava;
+    return `
+    <div class="loja-item ${sel.has(p.img) ? 'sel' : ''} ${bloqueada ? 'bloq' : ''}" data-lp="${i}">
       <img src="${esc(p.img)}" alt="" loading="lazy">
+      <div class="lorient ${o}">${ORIENT_ICO[o]} ${ORIENT_NOME[o]}</div>
       <div class="lt">${esc(p.titulo.slice(0, 40))}${p.artista ? `<span class="la">${esc(p.artista)}</span>` : ''}</div>
       ${sel.has(p.img) ? '<div class="lcheck">✓</div>' : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  const oc = L.orientacoes || { v: 0, h: 0, q: 0 };
+  const orientChips = [
+    ['', `todas · ${oc.v + oc.h + oc.q}`],
+    ['v', `${ORIENT_ICO.v} em pé · ${oc.v + oc.q}`],
+    ['h', `${ORIENT_ICO.h} deitadas · ${oc.h + oc.q}`],
+  ].map(([v, txt]) => `<button class="chip ${L.orient === v ? 'on' : ''}" data-or="${v}">${txt}</button>`).join('');
   // artistas: o selecionado + os 14 com mais obras (o resto entra pela busca)
   const topArt = L.artistas.slice(0, 14);
   if (L.artista && !topArt.find((a) => a.nome === L.artista)) {
@@ -365,6 +437,9 @@ function viewLoja() {
     <h2 class="view-t">🛍 Escolher da loja</h2>
     <p class="view-sub">Atelier Malta · ${L.total} obra${L.total === 1 ? '' : 's'}${L.completo === false ? ' <b>(carregando o resto…)</b>' : ''}${L.artista ? ` de <b>${esc(L.artista)}</b>` : ''}${L.busca ? ` com “${esc(L.busca)}”` : ''}. ${S.mk.artes.length ? `<b>${S.mk.artes.length} selecionada${S.mk.artes.length > 1 ? 's' : ''}</b>.` : 'Toque pra selecionar.'}</p>
     <div class="field"><input type="text" id="lj-q" placeholder="buscar por obra ou artista…" value="${esc(L.busca)}"></div>
+    <div class="field"><label>Orientação${trava ? ` — travada em <b>${ORIENT_NOME[trava]}</b> pelas que você já escolheu` : ''}</label>
+      <div class="chips">${orientChips}</div>
+      <div class="hint">Um vídeo é sempre de um lado só. Escolha um lado e a outra orientação fica bloqueada até você limpar a seleção.</div></div>
     <div class="field"><label>Artista</label><div class="chips">${artChips}</div></div>
     ${L.carregando ? '<div class="empty">carregando o catálogo…</div>'
       : (cells ? `<div class="loja-grid">${cells}</div>` : '<div class="empty">nada encontrado — tente outro termo ou artista</div>')}
@@ -379,15 +454,21 @@ function viewLoja() {
   let t;
   $('#lj-q').oninput = (e) => { L.busca = e.target.value; L.page = 1; clearTimeout(t); t = setTimeout(() => carregaLoja(), 350); };
   app.querySelectorAll('[data-art]').forEach((b) => b.onclick = () => { L.artista = b.dataset.art; L.page = 1; carregaLoja(); });
+  app.querySelectorAll('[data-or]').forEach((b) => b.onclick = () => { L.orient = b.dataset.or; L.artista = ''; L.page = 1; carregaLoja(); });
   const pv = $('#lj-prev'); if (pv) pv.onclick = () => { if (L.page > 1) { L.page -= 1; carregaLoja(); } };
   const nx = $('#lj-next'); if (nx) nx.onclick = () => { if (L.page < L.paginas) { L.page += 1; carregaLoja(); } };
   $('#lj-ok').onclick = () => { S.screen = null; S.tab = 'novo'; render(); };
   app.querySelectorAll('[data-lp]').forEach((el) => el.onclick = () => {
     const p = L.produtos[+el.dataset.lp];
+    const o = p.orient || 'v';
     const i = S.mk.artes.findIndex((a) => a.url === p.img);
-    if (i >= 0) S.mk.artes.splice(i, 1);
-    else if (S.mk.artes.length < 16) S.mk.artes.push({ url: p.img, prev: p.img });
-    else return toast('máximo 16 artes', true);
+    if (i >= 0) { S.mk.artes.splice(i, 1); return render(); }
+    const t = orientTravada();
+    if (t && o !== 'q' && o !== t) {
+      return toast(`o vídeo já está com obras ${ORIENT_NOME[t]} — essa é ${ORIENT_NOME[o]}. É um lado só.`, true);
+    }
+    if (S.mk.artes.length >= 16) return toast('máximo 16 artes', true);
+    S.mk.artes.push({ url: p.img, prev: p.img, orient: o });
     render();
   });
 }
@@ -395,11 +476,12 @@ function viewLoja() {
 async function carregaLoja() {
   S.loja.carregando = true; render();
   try {
-    const r = await api(`loja_produtos&page=${S.loja.page}&q=${encodeURIComponent(S.loja.busca)}&artista=${encodeURIComponent(S.loja.artista)}`);
+    const r = await api(`loja_produtos&page=${S.loja.page}&q=${encodeURIComponent(S.loja.busca)}&artista=${encodeURIComponent(S.loja.artista)}&orient=${S.loja.orient || ''}`);
     S.loja.produtos = r.produtos || [];
     S.loja.paginas = r.paginas || 1;
     S.loja.total = r.total || 0;
     if (r.artistas) S.loja.artistas = r.artistas;
+    if (r.orientacoes) S.loja.orientacoes = r.orientacoes;
     S.loja.completo = r.completo !== false;
   } catch (e) { toast(e.message, true); }
   S.loja.carregando = false; render();
@@ -631,7 +713,9 @@ function viewNovo() {
   const vozChips = VOZES.map((v) => `<button class="chip ${m.voz === v.id ? 'on' : ''}" data-voz="${v.id}">${v.label}</button>`).join('');
   const triChips = TRILHAS.map((t) => `<button class="chip ${m.musica === t ? 'on' : ''}" data-tri="${t}">${t}</button>`).join('');
   const legChips = LEGENDAS.map(([id, lb]) => `<button class="chip ${m.legenda === id ? 'on' : ''}" data-leg="${id}">${lb}</button>`).join('');
-  const artesHtml = m.artes.map((a, i) => `<div class="arte-th"><img src="${esc(a.prev)}" alt=""><button class="arte-x" data-delarte="${i}">✕</button></div>`).join('');
+  const artesHtml = m.artes.map((a, i) => `<div class="arte-th"><img src="${esc(a.prev)}" alt="">
+    <span class="arte-o">${ORIENT_ICO[a.orient || 'v']}</span>
+    <button class="arte-x" data-delarte="${i}">✕</button></div>`).join('');
   const umCen = !multi ? aprovados.find((c) => c.id === m.cenarioIds[0]) : null;
   const temNarr = !!m.narracao.trim();
   const estouro = total > 20;
@@ -735,7 +819,9 @@ function viewNovoErmos(fmtChips, bindFmt) {
     .map(([v, lb]) => `<button class="chip ${m.ritmo === v ? 'on' : ''}" data-rit="${v}">${lb}</button>`).join('');
   const durChipsEr = [6, 8, 10, 15].map((v) => `<button class="chip ${m.duracaoErmos === v ? 'on' : ''}" data-durer="${v}">${v}s</button>`).join('');
   const triChips = TRILHAS.map((t) => `<button class="chip ${m.musica === t ? 'on' : ''}" data-tri="${t}">${t}</button>`).join('');
-  const artesHtml = m.artes.map((a, i) => `<div class="arte-th"><img src="${esc(a.prev)}" alt=""><button class="arte-x" data-delarte="${i}">✕</button></div>`).join('');
+  const artesHtml = m.artes.map((a, i) => `<div class="arte-th"><img src="${esc(a.prev)}" alt="">
+    <span class="arte-o">${ORIENT_ICO[a.orient || 'v']}</span>
+    <button class="arte-x" data-delarte="${i}">✕</button></div>`).join('');
   const trocas = Math.round(m.duracaoErmos / m.ritmo);
   shell(`
     <h2 class="view-t">Novo mockup</h2>
@@ -829,6 +915,15 @@ function viewNovoErmos(fmtChips, bindFmt) {
   };
 }
 
+// createImageBitmap já aplica o EXIF (imageOrientation:'from-image'), então
+// foto de celular girada não engana a medida
+function orientDoArquivo(file) {
+  return createImageBitmap(file, { imageOrientation: 'from-image' }).then((bm) => {
+    const r = bm.width / bm.height; bm.close?.();
+    return r > 1.04 ? 'h' : (r < 0.96 ? 'v' : 'q');
+  });
+}
+
 function pickArtes() {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp'; inp.multiple = true;
@@ -843,18 +938,27 @@ function pickArtes() {
     S.mk.falhas = [];
     render();
     for (const f of files) {
+      S.mk.subindo.feitas += 1;
+      // mede ANTES de subir: nada de deitar o que ele mandou em pé, e nada
+      // de deixar entrar arte do lado contrário do que já está escolhido
+      let o = 'v';
+      try { o = await orientDoArquivo(f); } catch { /* ilegível: sobe como em pé */ }
+      const t = orientTravada();
+      if (t && o !== 'q' && o !== t) {
+        S.mk.falhas.push(`${f.name}: é ${ORIENT_NOME[o]}, mas o vídeo já está com obras ${ORIENT_NOME[t]} — é um lado só`);
+        render(); continue;
+      }
       const fd = new FormData(); fd.append('file', f);
       try {
         const r = await api('upload_image', { form: fd });
-        S.mk.artes.push({ url: r.url, prev: URL.createObjectURL(f) });
+        S.mk.artes.push({ url: r.url, prev: URL.createObjectURL(f), orient: o });
       } catch (e) { S.mk.falhas.push(`${f.name}: ${e.message}`); }
-      S.mk.subindo.feitas += 1;
       render(); // barra de progresso viva
     }
     const falhas = S.mk.falhas;
     S.mk.subindo = null;
     render();
-    if (falhas.length) toast(`${falhas.length} arte(s) falharam — veja o aviso vermelho`, true);
+    if (falhas.length) toast(`${falhas.length} arte(s) recusadas — veja o aviso vermelho`, true);
     else toast(`${files.length} arte${files.length > 1 ? 's' : ''} pronta${files.length > 1 ? 's' : ''} ✓`);
   };
   inp.click();

@@ -1,0 +1,8 @@
+# CSP só do estúdio (sobrescreve a do site inteiro, que é default-src 'self').
+# Diferença: frame-src libera o player do YouTube — sem isso o iframe é
+# bloqueado e o Vitor não consegue ouvir a trilha pra marcar o trecho.
+# O script do YouTube (iframe_api) continua BLOQUEADO de propósito: a ponte
+# com o player é feita por postMessage no nosso próprio JS.
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self';"
+</IfModule>

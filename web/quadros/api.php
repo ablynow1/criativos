@@ -230,9 +230,10 @@ function loja_catalogo(array $CONFIG, int $paginasPorChamada = 4): array {
         if ($raw === false) break;                            // tenta de novo na próxima chamada
         $lote = json_decode($raw, true)['products'] ?? [];
         foreach ($lote as $p) {
-            $img = $p['images'][0]['src'] ?? null;
-            if (!$img) continue;
-            $est['produtos'][] = ['titulo' => $p['title'], 'img' => $img, 'artista' => $p['vendor'] ?? ''];
+            $im = $p['images'][0] ?? null;
+            if (empty($im['src'])) continue;
+            $est['produtos'][] = ['titulo' => $p['title'], 'img' => $im['src'], 'artista' => $p['vendor'] ?? '',
+                                  'orient' => orientacao((int)($im['width'] ?? 0), (int)($im['height'] ?? 0))];
         }
         $est['proxima'] = $page + 1;
         if (count($lote) < 250) { $est['completo'] = true; break; }
@@ -241,6 +242,16 @@ function loja_catalogo(array $CONFIG, int $paginasPorChamada = 4): array {
     @file_put_contents($cacheFile, json_encode($est, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     return $est;
 }
+// em pé / deitada / quadrada — a régua de 4% evita chamar de "deitada" uma
+// obra praticamente quadrada (1010x1000 é quadrada pra qualquer efeito prático)
+function orientacao(int $w, int $h): string {
+    if ($w <= 0 || $h <= 0) return 'v';   // sem medida: trata como em pé (o padrão da loja)
+    $r = $w / $h;
+    if ($r > 1.04) return 'h';
+    if ($r < 0.96) return 'v';
+    return 'q';
+}
+
 // O worker (Mac) empurra o catálogo inteiro — o Hostgator trava depois de
 // poucas páginas na saída pra Shopify, então quem busca é quem tem internet
 // liberada. Fica em data/loja_catalogo.json no formato do loja_catalogo().
@@ -252,7 +263,8 @@ if ($action === 'worker_catalogo') {
     $limpos = [];
     foreach ($produtos as $p) {
         if (empty($p['img']) || empty($p['titulo'])) continue;
-        $limpos[] = ['titulo' => $p['titulo'], 'img' => $p['img'], 'artista' => $p['artista'] ?? ''];
+        $limpos[] = ['titulo' => $p['titulo'], 'img' => $p['img'], 'artista' => $p['artista'] ?? '',
+                     'orient' => orientacao((int)($p['w'] ?? 0), (int)($p['h'] ?? 0))];
     }
     @file_put_contents(DATA . '/loja_catalogo.json', json_encode(
         ['produtos' => $limpos, 'proxima' => 999, 'completo' => true, 'ts' => now(), 'via' => 'worker'],
@@ -267,7 +279,18 @@ if ($action === 'loja_produtos') {
     if (!$todos) fail('não consegui falar com a loja', 502);
     $q = mb_strtolower(trim($_GET['q'] ?? ''));
     $artista = trim($_GET['artista'] ?? '');
+    $orient = trim($_GET['orient'] ?? '');   // '' | v | h  (nunca se mistura num vídeo)
     $filtrados = $todos;
+    // contagem por orientação SEMPRE do catálogo inteiro (os chips não podem
+    // mudar de número conforme ele filtra, senão parece que sumiu obra)
+    $porOrient = ['v' => 0, 'h' => 0, 'q' => 0];
+    foreach ($todos as $p) $porOrient[$p['orient'] ?? 'v'] = ($porOrient[$p['orient'] ?? 'v'] ?? 0) + 1;
+    if ($orient === 'v' || $orient === 'h') {
+        // quadradas entram nos dois lados: cabem em qualquer moldura
+        $filtrados = array_values(array_filter($filtrados,
+            fn($p) => ($p['orient'] ?? 'v') === $orient || ($p['orient'] ?? 'v') === 'q'));
+    }
+    $doLado = $filtrados;   // universo da orientação escolhida (antes de artista/busca)
     if ($artista !== '') {
         $filtrados = array_values(array_filter($filtrados, fn($p) => $p['artista'] === $artista));
     }
@@ -275,9 +298,10 @@ if ($action === 'loja_produtos') {
         $filtrados = array_values(array_filter($filtrados, fn($p) =>
             str_contains(mb_strtolower($p['titulo']), $q) || str_contains(mb_strtolower($p['artista']), $q)));
     }
-    // artistas com contagem (do catálogo inteiro, pra lista do filtro)
+    // artistas com contagem — respeita a orientação escolhida, senão o chip
+    // diria "Renoir · 86" e ao clicar viriam 3 obras
     $cont = [];
-    foreach ($todos as $p) {
+    foreach ($doLado as $p) {
         $a = $p['artista'];
         if ($a !== '') $cont[$a] = ($cont[$a] ?? 0) + 1;
     }
@@ -292,7 +316,7 @@ if ($action === 'loja_produtos') {
     out(['ok' => true, 'produtos' => array_values($pagina), 'page' => $page,
          'total' => $total, 'paginas' => max(1, (int)ceil($total / $porPag)),
          'artistas' => $artistas, 'catalogo' => count($todos),
-         'completo' => (bool)$est['completo']]);
+         'orientacoes' => $porOrient, 'completo' => (bool)$est['completo']]);
 }
 
 // ============ YOUTUBE (busca de trilha) ============
