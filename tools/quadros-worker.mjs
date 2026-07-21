@@ -260,6 +260,8 @@ async function processErmos(job) {
     duracao: snap.duracao || 8,
     legenda: snap.legenda || '',
     musica: snap.musica || 'nenhuma',
+    ytId: snap.ytId || null,
+    ytInicio: snap.ytInicio || 0,
     formatos: Array.isArray(snap.formatos) ? snap.formatos : ['9:16'],
   };
   const cfgPath = path.join(jobDir, 'ermos.json');

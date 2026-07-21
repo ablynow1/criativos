@@ -185,6 +185,8 @@ if ($action === 'queue_ermos') {
             'logoUrl' => $b['logoUrl'] ?? null,
             'semLogo' => !empty($b['semLogo']),
             'musica' => $b['musica'] ?? 'nenhuma',
+            'ytId' => preg_match('/^[\w-]{11}$/', $b['ytId'] ?? '') ? $b['ytId'] : null,
+            'ytInicio' => max(0, (int)($b['ytInicio'] ?? 0)),
             'formatos' => (!empty($b['formatos']) && is_array($b['formatos'])) ? $b['formatos'] : ['9:16'],
         ],
         'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
@@ -259,6 +261,51 @@ if ($action === 'loja_produtos') {
     out(['ok' => true, 'produtos' => array_values($pagina), 'page' => $page,
          'total' => $total, 'paginas' => max(1, (int)ceil($total / $porPag)),
          'artistas' => $artistas, 'catalogo' => count($todos)]);
+}
+
+// ============ YOUTUBE (busca de trilha) ============
+// Lê a página de resultados e extrai os videoRenderer do ytInitialData.
+// Sem chave de API: o download real é feito pelo worker (yt-dlp) no Mac.
+if ($action === 'yt_busca') {
+    require_login();
+    $q = trim($_GET['q'] ?? '');
+    if ($q === '') fail('digite o que buscar');
+    $url = 'https://www.youtube.com/results?search_query=' . urlencode($q) . '&sp=EgIQAQ%253D%253D'; // só vídeos
+    $ctx = stream_context_create(['http' => [
+        'timeout' => 15,
+        'header' => "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36\r\n" .
+                    "Accept-Language: pt-BR,pt;q=0.9\r\n",
+    ]]);
+    $html = @file_get_contents($url, false, $ctx);
+    if ($html === false) fail('não consegui falar com o YouTube daqui', 502);
+    if (!preg_match('/ytInitialData\s*=\s*(\{.+?\});<\/script>/s', $html, $m)) {
+        fail('YouTube mudou o formato da página', 502);
+    }
+    $data = json_decode($m[1], true);
+    if (!$data) fail('não consegui ler os resultados', 502);
+    // caminha na árvore procurando videoRenderer (posição varia)
+    $achados = [];
+    $anda = function ($n) use (&$anda, &$achados) {
+        if (!is_array($n)) return;
+        if (isset($n['videoRenderer'])) {
+            $v = $n['videoRenderer'];
+            $id = $v['videoId'] ?? null;
+            $tit = $v['title']['runs'][0]['text'] ?? null;
+            $durTxt = $v['lengthText']['simpleText'] ?? null;
+            if ($id && $tit && $durTxt) {   // sem lengthText = live/short, ignora
+                $p = array_reverse(array_map('intval', explode(':', $durTxt)));
+                $seg = ($p[0] ?? 0) + (($p[1] ?? 0) * 60) + (($p[2] ?? 0) * 3600);
+                $achados[$id] = [
+                    'id' => $id, 'titulo' => $tit, 'dur' => $seg, 'durTxt' => $durTxt,
+                    'canal' => $v['ownerText']['runs'][0]['text'] ?? '',
+                    'thumb' => "https://i.ytimg.com/vi/$id/mqdefault.jpg",
+                ];
+            }
+        }
+        foreach ($n as $f) if (is_array($f)) $anda($f);
+    };
+    $anda($data);
+    out(['ok' => true, 'videos' => array_slice(array_values($achados), 0, 18)]);
 }
 
 // ============ CATEGORIAS ============

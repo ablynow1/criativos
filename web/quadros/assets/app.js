@@ -9,11 +9,13 @@ const S = {
   auth: false, tab: 'cenarios', screen: null, catFiltro: null, // null = home (pastas)
   cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
   loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], carregando: false },
+  yt: { busca: '', videos: [], sel: null, inicio: 0, carregando: false },
   // form do mockup (artes = lote [{url,prev}]; cenarioIds = pool multi-select)
   mk: { formato: 'ugc', cenarioIds: [], artes: [], modo: 'sortear', movimento: 'medio', duracaoAlvo: 25, abertura: false,
     narracao: '', voz: 'pt-BR-Neural2-C', musica: 'nenhuma', legenda: 'caixa', fmt45: false, variar: false,
     // ermos
     fundoIds: [], moldura2d: 'preto', ritmo: 0.3, duracaoErmos: 8,
+    ytId: null, ytTitulo: '', ytInicio: 0,
     legendaErmos: 'TODAS AS OBRAS JÁ DISPONÍVEIS EM NOSSO SITE', logoUrl: null },
   // form do cenário (molduraId = da biblioteca; duplicarDe = herda avatar/ambiente)
   cn: { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
@@ -232,6 +234,99 @@ function viewFundos() {
     if (!S.mk.fundoIds.includes(b.dataset.usef)) S.mk.fundoIds.push(b.dataset.usef);
     S.tab = 'novo'; S.screen = null; render();
   });
+}
+
+// ---------- YOUTUBE (trilha: buscar, ouvir, marcar o início) ----------
+function fmtT(s) {
+  s = Math.max(0, Math.round(s));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function viewYoutube() {
+  const Y = S.yt;
+  const dur = S.mk.duracaoErmos;
+  const cells = Y.videos.map((v, i) => `
+    <div class="yt-item ${Y.sel && Y.sel.id === v.id ? 'sel' : ''}" data-ytv="${i}">
+      <img src="${esc(v.thumb)}" alt="" loading="lazy">
+      <div class="yt-t"><b>${esc(v.titulo.slice(0, 52))}</b><span>${esc(v.canal.slice(0, 26))} · ${esc(v.durTxt)}</span></div>
+    </div>`).join('');
+  shell(`
+    <h2 class="view-t">▶ Trilha do YouTube</h2>
+    <p class="view-sub">Busque, ouça e marque onde a música começa. O worker baixa só o trecho de <b>${dur}s</b> que você escolher.</p>
+    <div class="field"><input type="text" id="yt-q" placeholder="ex: cinematic emotional piano…" value="${esc(Y.busca)}">
+      <div class="hint">Use trilhas que você tem direito de usar (royalty-free, sua própria ou licenciada) — anúncio com música de terceiros pode ser derrubado por direitos autorais.</div>
+    </div>
+    ${Y.sel ? `<div class="yt-player">
+      <div id="yt-frame"></div>
+      <div class="yt-marca">
+        <div class="yt-marca-l">início: <b id="yt-ini">${fmtT(Y.inicio)}</b> → ${fmtT(Y.inicio + dur)}</div>
+        <button class="btn sm" id="yt-aqui">marcar aqui ⏱</button>
+      </div>
+      <input type="range" id="yt-range" min="0" max="${Math.max(0, Y.sel.dur - dur)}" value="${Y.inicio}" step="1">
+      <button class="btn" id="yt-ok">Usar esta trilha</button>
+    </div>` : ''}
+    ${Y.carregando ? '<div class="empty">buscando…</div>' : (cells ? `<div class="yt-grid">${cells}</div>` : '')}
+    <div class="spacer"></div>
+    <button class="btn ghost" id="yt-voltar">Voltar</button>
+  `);
+  let t;
+  $('#yt-q').oninput = (e) => { Y.busca = e.target.value; clearTimeout(t); t = setTimeout(() => buscaYt(), 500); };
+  $('#yt-voltar').onclick = () => { S.screen = null; render(); };
+  app.querySelectorAll('[data-ytv]').forEach((el) => el.onclick = () => {
+    Y.sel = Y.videos[+el.dataset.ytv]; Y.inicio = 0; render();
+  });
+  if (Y.sel) {
+    montaPlayerYt(Y.sel.id, Y.inicio);
+    // NADA aqui pode chamar render(): recriar o #yt-frame mata o player e
+    // reinicia a música no meio da escuta. Atualizamos o DOM na mão.
+    const pintaInicio = () => {
+      const el = $('#yt-ini');
+      if (el) el.textContent = `${fmtT(Y.inicio)}`;
+      const lbl = el && el.parentElement;
+      if (lbl) lbl.innerHTML = `início: <b id="yt-ini">${fmtT(Y.inicio)}</b> → ${fmtT(Y.inicio + dur)}`;
+    };
+    const r = $('#yt-range');
+    r.oninput = (e) => { Y.inicio = +e.target.value; pintaInicio(); };
+    r.onchange = () => { if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(Y.inicio, true); };
+    $('#yt-aqui').onclick = () => {
+      if (!ytPlayer || !ytPlayer.getCurrentTime) return toast('espere o player carregar', true);
+      Y.inicio = Math.max(0, Math.min(Math.round(ytPlayer.getCurrentTime()), Math.max(0, Y.sel.dur - dur)));
+      r.value = Y.inicio; pintaInicio();
+      toast(`trecho começa em ${fmtT(Y.inicio)}`);
+    };
+    $('#yt-ok').onclick = () => {
+      S.mk.ytId = Y.sel.id; S.mk.ytTitulo = Y.sel.titulo; S.mk.ytInicio = Y.inicio;
+      S.mk.musica = 'nenhuma'; // a trilha do YouTube substitui o mood gerado
+      S.screen = null; render(); toast('trilha escolhida ✓');
+    };
+  }
+}
+
+let ytPlayer = null;
+function montaPlayerYt(id, inicio) {
+  const cria = () => {
+    ytPlayer = new YT.Player('yt-frame', {
+      height: '200', width: '100%', videoId: id,
+      playerVars: { start: inicio, rel: 0, modestbranding: 1 },
+    });
+  };
+  if (window.YT && window.YT.Player) return cria();
+  if (!document.querySelector('#yt-api')) {
+    const s = document.createElement('script');
+    s.id = 'yt-api'; s.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(s);
+  }
+  window.onYouTubeIframeAPIReady = cria;
+}
+
+async function buscaYt() {
+  if (!S.yt.busca.trim()) return;
+  S.yt.carregando = true; render();
+  try {
+    const r = await api(`yt_busca&q=${encodeURIComponent(S.yt.busca)}`);
+    S.yt.videos = r.videos || [];
+  } catch (e) { toast(e.message, true); }
+  S.yt.carregando = false; render();
 }
 
 // ---------- LOJA (picker de artes do catálogo Shopify) ----------
@@ -604,7 +699,12 @@ function viewNovoErmos(fmtChips, bindFmt) {
     return;
   }
   if (!m.fundoIds.length) m.fundoIds = [prontos[0].id];
-  const fundoChips = prontos.map((f) => `<button class="chip ${m.fundoIds.includes(f.id) ? 'on' : ''}" data-fnd="${esc(f.id)}">${esc(f.nome)}</button>`).join('');
+  // miniaturas dos lugares (dá pra ver o cenário sem sair do form)
+  const fundoChips = prontos.map((f) => `<button class="fnd-card ${m.fundoIds.includes(f.id) ? 'on' : ''}" data-fnd="${esc(f.id)}">
+    <img src="${esc(f.thumb)}" alt="" loading="lazy">
+    <span>${esc(f.nome)}</span>
+    ${m.fundoIds.includes(f.id) ? '<i class="fnd-ok">✓</i>' : ''}
+  </button>`).join('');
   const moldBtns = [['preto', '⬛ Preto'], ['branco', '⬜ Branco'], ['marfim', '🟨 Marfim'], ['arabesco', '👑 Arabesco']]
     .map(([id, lb]) => `<button class="chip ${m.moldura2d === id ? 'on' : ''}" data-m2d="${id}">${lb}</button>`).join('');
   const ritmoChips = [[0.2, '⚡ 0,2s'], [0.3, '0,3s'], [0.5, '0,5s'], [0.8, '0,8s'], [1.2, '🐢 1,2s']]
@@ -618,7 +718,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
     ${fmtChips}
     <p class="view-sub">O quadro flutua sobre o lugar e as artes se <b>revezam em loop</b>. ${m.artes.length ? `${m.artes.length} artes · <b>${trocas} trocas</b> em ${m.duracaoErmos}s.` : 'Sem modelo, sem espera de Veo — sai em segundos.'}</p>
     <div class="field"><label>Lugar${m.fundoIds.length > 1 ? 'es · ' + m.fundoIds.length : ''} (2+ = o fundo troca durante o vídeo)</label>
-      <div class="chips">${fundoChips}</div></div>
+      <div class="fnd-grid">${fundoChips}</div></div>
     <div class="field"><label>Moldura</label><div class="chips">${moldBtns}</div></div>
     <div class="field"><label>Arte${m.artes.length > 1 ? 's' : ''} ${m.artes.length ? `· ${m.artes.length}` : ''} (trocam em sequência)</label>
       <div class="artes-row">${artesHtml}
@@ -639,7 +739,16 @@ function viewNovoErmos(fmtChips, bindFmt) {
       </div>
       ${m.logoUrl ? `<div class="logo-prev"><img src="${esc(m.logoUrl)}" alt=""></div>` : ''}
     </div>
-    <div class="field"><label>Trilha musical</label><div class="chips">${triChips}</div></div>
+    <div class="field"><label>Trilha musical</label>
+      <div class="chips">${triChips}
+        <button class="chip ${m.ytId ? 'on' : ''}" data-yt-abrir="1">▶ do YouTube</button></div>
+      ${m.ytId ? `<div class="yt-sel">
+        <img src="https://i.ytimg.com/vi/${esc(m.ytId)}/mqdefault.jpg" alt="">
+        <div class="yt-info"><b>${esc(m.ytTitulo || m.ytId)}</b>
+          <span>começa em <b>${fmtT(m.ytInicio || 0)}</b> · pega ${m.duracaoErmos}s</span></div>
+        <button class="btn sm ghost" data-yt-abrir="1">trocar</button>
+      </div>` : ''}
+    </div>
     <div class="row"><span class="rl">Exportar também 4:5 (feed do Meta)</span><button class="tg ${m.fmt45 ? 'on' : ''}" id="mk-45"></button></div>
     <div class="spacer"></div>
     ${m.subindo ? `<div class="subindo">subindo artes… <b>${m.subindo.feitas}/${m.subindo.total}</b>
@@ -658,7 +767,8 @@ function viewNovoErmos(fmtChips, bindFmt) {
   app.querySelectorAll('[data-m2d]').forEach((b) => b.onclick = () => { m.moldura2d = b.dataset.m2d; render(); });
   app.querySelectorAll('[data-rit]').forEach((b) => b.onclick = () => { m.ritmo = +b.dataset.rit; render(); });
   app.querySelectorAll('[data-durer]').forEach((b) => b.onclick = () => { m.duracaoErmos = +b.dataset.durer; render(); });
-  app.querySelectorAll('[data-tri]').forEach((b) => b.onclick = () => { m.musica = b.dataset.tri; render(); });
+  app.querySelectorAll('[data-tri]').forEach((b) => b.onclick = () => { m.musica = b.dataset.tri; m.ytId = null; render(); });
+  app.querySelectorAll('[data-yt-abrir]').forEach((b) => b.onclick = () => { S.screen = 'youtube'; render(); });
   app.querySelectorAll('[data-delarte]').forEach((b) => b.onclick = () => { m.artes.splice(+b.dataset.delarte, 1); render(); });
   $('#er-leg').oninput = (e) => { m.legendaErmos = e.target.value; };
   $('#drop').onclick = pickArtes;
@@ -685,6 +795,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
         arteUrls: m.artes.map((a) => a.url),
         ritmo: m.ritmo, duracao: m.duracaoErmos, legenda: m.legendaErmos.trim(),
         logoUrl: m.logoUrl, semLogo: !!m.semLogo, musica: m.musica,
+        ytId: m.ytId, ytInicio: m.ytInicio,
         formatos: m.fmt45 ? ['9:16', '4:5'] : ['9:16'], nome: '',
       } });
       m.artes = [];
@@ -803,6 +914,7 @@ function render() {
   if (S.screen === 'categorias') return viewCategorias();
   if (S.screen === 'molduras') return viewMolduras();
   if (S.screen === 'loja') return viewLoja();
+  if (S.screen === 'youtube') return viewYoutube();
   if (S.screen && S.screen.startsWith('aprovar:')) return viewAprovar(S.screen.slice(8));
   ({ cenarios: viewCenarios, novo: viewNovo, fila: viewFila, galeria: viewGaleria, ajustes: viewAjustes }[S.tab] || viewCenarios)();
 }
@@ -824,6 +936,8 @@ let pollT, lastSig = '';
 // há vídeo tocando na tela? (o re-render destrói o <video> e cortaria a
 // reprodução no meio — então segura a atualização enquanto o Vitor assiste)
 function assistindo() {
+  // vídeo tocando OU escolhendo trilha no YouTube (o iframe morre no re-render)
+  if (S.screen === 'youtube') return true;
   return [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended);
 }
 
