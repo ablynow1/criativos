@@ -160,6 +160,16 @@ O keyframe é gerado uma vez por `tools/fundo-keyframes.mjs`, que grava em
 Sem isso o preview seria uma imagem e o vídeo outra. O manifest é sempre
 derivado do `FUNDOS` — nunca editado à mão.
 
+**A moldura é UMA só o vídeo inteiro; quem troca é a arte.** O acervo não é
+padronizado (as verticais vão de 0,60 a 0,96), então derivar o quadro de cada
+obra fazia a moldura pulsar a cada troca. O `fromErmos` decide **um** aspecto
+pelas artes reais — `0.707` em pé, `1.414` deitado, `1.0` quadrado — e manda o
+mesmo `--aspecto` pra todas: os PNGs saem idênticos ao pixel. Dentro da
+abertura fixa a obra entra **inteira sobre passe-partout** (`painel()` no
+`ermos-compose.py`), com margem mínima de 5% e filete. Cortar as obras pra
+encaixar seria mutilar a pintura — e vender um recorte do que o cliente compra
+inteiro.
+
 **Refazer** (`requeue_ermos`): clona um Ermos pronto trocando só a moldura
 e/ou os lugares; artes, ritmo, duração, trilha e legenda vêm do snapshot
 original. É o jeito barato de comparar variações do mesmo criativo — não passa

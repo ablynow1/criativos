@@ -93,28 +93,37 @@ async function main() {
 
   // 1) monta o quadro 2D de cada arte (produto flutuante)
   console.log(`[1/3] montando ${artes.length} quadro(s) (moldura ${moldura})…`);
+  // A MOLDURA É UMA SÓ o vídeo inteiro — quem troca é a arte. Então o aspecto
+  // se decide UMA vez, aqui, pelas artes de verdade (não pelo que a UI achou),
+  // e vai igual pra todas. Sem isso cada obra gerava um quadro de altura
+  // diferente e a moldura "pulsava" a cada troca.
+  const ladosArte = [];
+  for (const a of artes) {
+    const m = await probeWH(a);
+    ladosArte.push(m.w > m.h * 1.04 ? 'h' : (m.w < m.h * 0.96 ? 'v' : 'q'));
+  }
+  const nH = ladosArte.filter((l) => l === 'h').length;
+  const nV = ladosArte.filter((l) => l === 'v').length;
+  if (nH && nV) {
+    console.error(`  ⚠️ artes misturadas (${nV} em pé, ${nH} deitadas) — vale a maioria. Use um lado só.`);
+  }
+  const deitado = nH > nV;
+  const quadrado = !nH && !nV;
+  const aspecto = quadrado ? 1 : (deitado ? 1.414 : 0.707);
+
   const quadros = [];
-  const medidas = [];
   for (let i = 0; i < artes.length; i += 1) {
     const q = path.join(tmpDir, `quadro-${i}.png`);
-    await run(PY, [COMPOSE, '--arte', artes[i], '--moldura', moldura, '--out', q, '--largura', '860']);
+    await run(PY, [COMPOSE, '--arte', artes[i], '--moldura', moldura, '--out', q,
+      '--largura', '860', '--aspecto', String(aspecto)]);
     quadros.push(q);
-    medidas.push(await probeWH(q));
   }
-  // O quadro montado herda a orientação da arte (quem faz isso é o
-  // ermos-compose). Medimos o PNG pronto — é a verdade do que vai pra tela,
-  // não o que a UI achou que era. Um vídeo é sempre de um lado só; se vier
-  // misturado, vale a maioria e fica o aviso no log.
-  const lados = medidas.map((m) => (m.w > m.h ? 'h' : 'v'));
-  const deitado = lados.filter((l) => l === 'h').length > lados.length / 2;
-  if (new Set(lados).size > 1) {
-    console.error(`  ⚠️ artes misturadas (${lados.join(',')}) — usando o layout ${deitado ? 'deitado' : 'em pé'}. Use um lado só.`);
-  }
+  const medida = await probeWH(quadros[0]);   // todos idênticos por construção
   const larguraQ = deitado ? QUADRO_W_H : QUADRO_W;
-  const alturaQ = Math.round(larguraQ * medidas[0].h / medidas[0].w);
-  // deitado: centro do criativo inteiro (1920). em pé: centro da capa (1440).
-  const quadroY = deitado ? Math.round((CANVAS_H - alturaQ) / 2) : QUADRO_Y;
-  console.log(`  quadro ${deitado ? 'deitado' : 'em pé'}: ${larguraQ}x${alturaQ} em y=${quadroY}`);
+  const alturaQ = Math.round(larguraQ * medida.h / medida.w);
+  // em pé: centro da CAPA do Reels (1440). deitado/quadrado: centro do criativo.
+  const quadroY = deitado || quadrado ? Math.round((CANVAS_H - alturaQ) / 2) : QUADRO_Y;
+  console.log(`  quadro ${quadrado ? 'quadrado' : deitado ? 'deitado' : 'em pé'} (aspecto ${aspecto}): ${larguraQ}x${alturaQ} em y=${quadroY} — igual pras ${artes.length} artes`);
 
   // 2) base: fundos em sequência (ciclando) até cobrir T
   console.log('[2/3] montando a base de fundos…');

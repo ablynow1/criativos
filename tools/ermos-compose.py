@@ -28,28 +28,53 @@ CORES = {
     'branco': {'face': (242, 244, 244), 'clara': (255, 255, 255), 'escura': (205, 208, 208)},
     'marfim': {'face': (204, 224, 236), 'clara': (224, 240, 248), 'escura': (168, 190, 208)},  # BGR (marfim quente)
 }
-ASPECT_PADRAO = 3 / 4   # retrato 3:4 quando a arte já e' retrato
-ASPECT_MIN, ASPECT_MAX = 0.6, 1.7   # limites (evita quadro exageradamente fino/largo)
+# TAMANHO UNICO por orientacao. O acervo NAO e' padronizado (as verticais vao
+# de 0.60 a 0.96), entao derivar o quadro da arte fazia a moldura mudar de
+# tamanho a cada troca. Agora a moldura e' sempre a mesma e quem muda e' so' a
+# arte — que entra INTEIRA sobre um passe-partout, como numa moldaria de
+# verdade. Cortar as obras pra encaixar seria mutilar a pintura.
+ASPECT_RETRATO = 0.707    # 1:raiz(2) — reproduz a altura aprovada pelo Vitor
+ASPECT_PAISAGEM = 1.414
+ASPECT_QUADRADO = 1.0
+PP_COR = (238, 240, 242)  # BGR — passe-partout marfim de museu
+PP_MARGEM = 0.05          # margem minima do passe-partout (fracao do menor lado)
 BORDA_FRAC = 0.075      # largura da moldura procedural
 SOMBRA_BLUR = 31        # sombra portada (baked)
 SOMBRA_ALPHA = 110
 SOMBRA_DESLOC = 18
 
 
-def crop_aspect(img, aspect):
-    h, w = img.shape[:2]
-    if w / h > aspect:
-        nw = int(h * aspect); x0 = (w - nw) // 2
-        return img[:, x0:x0 + nw]
-    nh = int(w / aspect); y0 = (h - nh) // 2
-    return img[y0:y0 + nh, :]
+def painel(arte, largura, altura):
+    """A ABERTURA da moldura tem sempre este tamanho; a obra entra inteira,
+    centralizada, sobre o passe-partout. Nada de corte, nada de esticao — o
+    que muda entre uma arte e outra e' so' a espessura da margem."""
+    pnl = np.full((altura, largura, 3), PP_COR, np.uint8)
+    m = max(6, int(min(largura, altura) * PP_MARGEM))
+    livre_w, livre_h = largura - 2 * m, altura - 2 * m
+    ah, aw = arte.shape[:2]
+    k = min(livre_w / aw, livre_h / ah)
+    nw, nh = max(1, int(aw * k)), max(1, int(ah * k))
+    x0, y0 = (largura - nw) // 2, (altura - nh) // 2
+    pnl[y0:y0 + nh, x0:x0 + nw] = cv2.resize(arte, (nw, nh), interpolation=cv2.INTER_AREA)
+    # filete do passe-partout: sem isso a margem parece erro de encaixe
+    cv2.rectangle(pnl, (x0 - 2, y0 - 2), (x0 + nw + 1, y0 + nh + 1), (176, 178, 182), 2)
+    # sombrinha interna: assenta a obra no rebaixo do cartao
+    som = np.zeros((altura, largura), np.float32)
+    cv2.rectangle(som, (x0 - 1, y0 - 1), (x0 + nw, y0 + nh), 1.0, 5)
+    som = cv2.GaussianBlur(som, (0, 0), 3)
+    return np.clip(pnl.astype(np.float32) * (1 - 0.30 * som[..., None]), 0, 255).astype(np.uint8)
 
 
-def aspecto_da_arte(arte):
-    """O quadro SEGUE a orientacao da arte: foto em pe' -> quadro em pe';
-    foto deitada -> quadro deitado. Nunca girar/espremer o que o Vitor subiu."""
+def aspecto_padrao(arte):
+    """Orientacao da arte -> o aspecto FIXO daquele lado. Foto em pe' nunca
+    vira quadro deitado, e duas fotos em pe' geram exatamente o mesmo quadro."""
     h, w = arte.shape[:2]
-    return float(np.clip(w / h, ASPECT_MIN, ASPECT_MAX))
+    r = w / h
+    if r > 1.04:
+        return ASPECT_PAISAGEM
+    if r < 0.96:
+        return ASPECT_RETRATO
+    return ASPECT_QUADRADO
 
 
 def moldura_procedural(arte, cor, largura, aspect):
@@ -58,7 +83,7 @@ def moldura_procedural(arte, cor, largura, aspect):
     alt = int(largura / aspect)
     borda = int(largura * BORDA_FRAC)
     arte_w, arte_h = largura - 2 * borda, alt - 2 * borda
-    arte_r = cv2.resize(arte, (arte_w, arte_h), interpolation=cv2.INTER_AREA)
+    arte_r = painel(arte, arte_w, arte_h)
 
     quadro = np.zeros((alt, largura, 3), np.uint8)
     quadro[:] = c['face']
@@ -105,10 +130,15 @@ def moldura_arabesco(arte, largura, aspect):
     s = quad.sum(axis=1); d = np.diff(quad, axis=1).ravel()
     quad = np.array([quad[np.argmin(s)], quad[np.argmin(d)], quad[np.argmax(s)], quad[np.argmax(d)]], np.float32)
 
-    ah, aw = arte.shape[:2]
+    # o painel nasce NA PROPORCAO da abertura verde — se nascesse na proporcao
+    # da arte, o warp esticaria o passe-partout pra caber no quad
+    quad_w = int(round(max(np.linalg.norm(quad[1] - quad[0]), np.linalg.norm(quad[2] - quad[3]))))
+    quad_h = int(round(max(np.linalg.norm(quad[3] - quad[0]), np.linalg.norm(quad[2] - quad[1]))))
+    pnl = painel(arte, max(2, quad_w), max(2, quad_h))
+    ah, aw = pnl.shape[:2]
     src = np.array([[0, 0], [aw, 0], [aw, ah], [0, ah]], np.float32)
     H = cv2.getPerspectiveTransform(src, quad)
-    warp = cv2.warpPerspective(arte, H, (fr.shape[1], fr.shape[0]), flags=cv2.INTER_LINEAR)
+    warp = cv2.warpPerspective(pnl, H, (fr.shape[1], fr.shape[0]), flags=cv2.INTER_LINEAR)
     alpha_arte = (cv2.GaussianBlur(verde, (3, 3), 0).astype(np.float32) / 255)[..., None]
     comp = (warp * alpha_arte + fr * (1 - alpha_arte)).astype(np.uint8)
 
@@ -151,16 +181,18 @@ def main():
     ap.add_argument('--moldura', required=True, choices=['preto', 'branco', 'marfim', 'arabesco'])
     ap.add_argument('--out', required=True)
     ap.add_argument('--largura', type=int, default=900)
+    ap.add_argument('--aspecto', type=float, default=None,
+                    help='forca o aspecto do quadro (o fromErmos manda o mesmo pra todas '
+                         'as artes do video, pra moldura nao mudar de tamanho na troca)')
     args = ap.parse_args()
 
     arte = cv2.imread(args.arte, cv2.IMREAD_COLOR)
     if arte is None:
         sys.exit(f'arte ilegivel: {args.arte}')
-    # o quadro herda a ORIENTACAO da arte (nunca deitar uma foto em pe')
-    aspect = aspecto_da_arte(arte)
-    arte = crop_aspect(arte, aspect)   # so' apara o excesso, nao gira nada
-    # arte deitada com largura fixa ficaria gigante — normaliza pela area
-    largura = args.largura if aspect <= 1 else int(args.largura * 1.12)
+    # o quadro herda a ORIENTACAO da arte (nunca deitar uma foto em pe'), mas o
+    # TAMANHO e' fixo: quem muda entre uma arte e outra e' so' a obra
+    aspect = args.aspecto if args.aspecto else aspecto_padrao(arte)
+    largura = args.largura
 
     if args.moldura == 'arabesco':
         quadro = moldura_arabesco(arte, largura, aspect)
