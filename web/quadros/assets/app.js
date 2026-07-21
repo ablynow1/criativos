@@ -734,11 +734,20 @@ function viewFila() {
       : j.tipo === 'ermos' ? '<span class="jt mock">ermos</span>'
       : j.tipo === 'fundo' ? '<span class="jt">lugar</span>'
       : '<span class="jt">cenário</span>';
+    // vídeo pronto: player embutido no próprio card (sem ir na Galeria)
+    const temVideo = j.status === 'done' && j.video;
     return `<div class="job">
       <div class="jh">${badge}<span class="jn">${esc(j.nome)}</span></div>
       <div class="stage">${esc(j.stage || j.status)}${j.status === 'done' ? ' ✓' : ''}</div>
       ${j.status !== 'done' && j.status !== 'error' ? `<div class="bar ${running ? 'run' : ''}"><i style="width:${j.pct || 0}%"></i></div>` : ''}
       ${j.error ? `<div class="err">${esc(j.error)}</div>` : ''}
+      ${temVideo ? `<div class="jvid">
+        <video src="${esc(j.video)}" controls playsinline preload="metadata"></video>
+        <div class="gdl">
+          <a href="${esc(j.video)}" download>⬇ 9:16</a>
+          ${j.video45 ? `<a href="${esc(j.video45)}" download>⬇ 4:5 feed</a>` : ''}
+        </div>
+      </div>` : ''}
       <div class="jactions">
         ${j.status === 'error' ? `<button class="btn sm ghost" data-retry="${esc(j.id)}">Tentar de novo</button>` : ''}
         ${['queued', 'claimed', 'running'].includes(j.status) ? `<button class="btn sm ghost" data-cancel="${esc(j.id)}">Cancelar</button>` : ''}
@@ -812,6 +821,12 @@ async function refresh() {
 }
 
 let pollT, lastSig = '';
+// há vídeo tocando na tela? (o re-render destrói o <video> e cortaria a
+// reprodução no meio — então segura a atualização enquanto o Vitor assiste)
+function assistindo() {
+  return [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended);
+}
+
 function startPoll() {
   clearInterval(pollT);
   pollT = setInterval(async () => {
@@ -819,10 +834,11 @@ function startPoll() {
       const { jobs } = await api('jobs');
       const sig = jobs.map((j) => `${j.id}:${j.status}:${j.pct}`).join('|');
       if (sig !== lastSig) {
-        lastSig = sig;
         // se um cenário acabou de ficar pronto, recarrega o state (traz thumbs)
         const st = await api('state');
         S.cenarios = st.cenarios || []; S.jobs = st.jobs || [];
+        if (assistindo()) return;   // mantém lastSig: re-renderiza quando pausar
+        lastSig = sig;
         render();
       }
     } catch (e) { /* silencioso */ }
