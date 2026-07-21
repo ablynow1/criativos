@@ -201,38 +201,69 @@ if ($action === 'queue_ermos') {
 // ============ LOJA (catálogo Shopify: busca + filtro por artista) ============
 // Baixa TODAS as páginas do products.json uma vez e cacheia (o catálogo tem
 // ~2000 obras). `vendor` é o artista (campo limpo da loja). Cache 1h.
-function loja_catalogo(array $CONFIG): array {
+// O catálogo tem milhares de obras (21+ páginas). Buscar tudo numa requisição
+// estoura o tempo do PHP compartilhado — então carregamos INCREMENTALMENTE:
+// cada chamada puxa mais algumas páginas e guarda o progresso. A UI mostra o
+// que já tem e continua pedindo até completar.
+function loja_catalogo(array $CONFIG, int $paginasPorChamada = 4): array {
     $cacheFile = DATA . '/loja_catalogo.json';
-    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < 3600) {
+    $est = ['produtos' => [], 'proxima' => 1, 'completo' => false, 'ts' => 0];
+    if (file_exists($cacheFile)) {
         $c = json_decode((string)file_get_contents($cacheFile), true);
-        if (is_array($c) && $c) return $c;
+        if (is_array($c) && isset($c['produtos'])) $est = $c;
     }
+    // cache completo e fresco (6h) — devolve na hora
+    if ($est['completo'] && (time() - ($est['ts'] ?? 0)) < 21600) return $est;
+    // expirou: recomeça do zero
+    if ($est['completo']) $est = ['produtos' => [], 'proxima' => 1, 'completo' => false, 'ts' => 0];
+
     $loja = rtrim($CONFIG['defaults']['lojaUrl'] ?? 'https://ateliermalta.com.br', '/');
-    $ctx = stream_context_create(['http' => ['timeout' => 20, 'header' => "User-Agent: QuadrosStudio/1.0\r\n"]]);
-    $todos = [];
-    for ($page = 1; $page <= 40; $page++) { // teto de segurança (40 × 250 = 10k)
-        $raw = @file_get_contents("$loja/products.json?limit=250&page=$page", false, $ctx);
-        if ($raw === false) break;
-        $js = json_decode($raw, true);
-        $lote = $js['products'] ?? [];
-        if (!$lote) break;
+    $ctx = stream_context_create(['http' => ['timeout' => 12, 'header' => "User-Agent: QuadrosStudio/1.0\r\n"]]);
+    for ($i = 0; $i < $paginasPorChamada; $i++) {
+        $page = $est['proxima'];
+        if ($page > 60) { $est['completo'] = true; break; }  // teto de segurança
+        $raw = false;
+        for ($t = 0; $t < 2 && $raw === false; $t++) {        // 1 retentativa por página
+            $raw = @file_get_contents("$loja/products.json?limit=250&page=$page", false, $ctx);
+            if ($raw === false) usleep(400000);
+        }
+        if ($raw === false) break;                            // tenta de novo na próxima chamada
+        $lote = json_decode($raw, true)['products'] ?? [];
         foreach ($lote as $p) {
             $img = $p['images'][0]['src'] ?? null;
             if (!$img) continue;
-            $todos[] = [
-                'titulo' => $p['title'],
-                'img' => $img,
-                'artista' => $p['vendor'] ?? '',
-            ];
+            $est['produtos'][] = ['titulo' => $p['title'], 'img' => $img, 'artista' => $p['vendor'] ?? ''];
         }
-        if (count($lote) < 250) break;
+        $est['proxima'] = $page + 1;
+        if (count($lote) < 250) { $est['completo'] = true; break; }
     }
-    if ($todos) @file_put_contents($cacheFile, json_encode($todos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    return $todos;
+    $est['ts'] = time();
+    @file_put_contents($cacheFile, json_encode($est, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    return $est;
 }
+// O worker (Mac) empurra o catálogo inteiro — o Hostgator trava depois de
+// poucas páginas na saída pra Shopify, então quem busca é quem tem internet
+// liberada. Fica em data/loja_catalogo.json no formato do loja_catalogo().
+if ($action === 'worker_catalogo') {
+    require_worker();
+    $raw = file_get_contents('php://input');
+    $produtos = json_decode((string)$raw, true);
+    if (!is_array($produtos) || !$produtos) fail('catálogo vazio');
+    $limpos = [];
+    foreach ($produtos as $p) {
+        if (empty($p['img']) || empty($p['titulo'])) continue;
+        $limpos[] = ['titulo' => $p['titulo'], 'img' => $p['img'], 'artista' => $p['artista'] ?? ''];
+    }
+    @file_put_contents(DATA . '/loja_catalogo.json', json_encode(
+        ['produtos' => $limpos, 'proxima' => 999, 'completo' => true, 'ts' => now(), 'via' => 'worker'],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    out(['ok' => true, 'guardados' => count($limpos)]);
+}
+
 if ($action === 'loja_produtos') {
     require_login();
-    $todos = loja_catalogo($CONFIG);
+    $est = loja_catalogo($CONFIG);
+    $todos = $est['produtos'];
     if (!$todos) fail('não consegui falar com a loja', 502);
     $q = mb_strtolower(trim($_GET['q'] ?? ''));
     $artista = trim($_GET['artista'] ?? '');
@@ -260,7 +291,8 @@ if ($action === 'loja_produtos') {
     $pagina = array_slice($filtrados, ($page - 1) * $porPag, $porPag);
     out(['ok' => true, 'produtos' => array_values($pagina), 'page' => $page,
          'total' => $total, 'paginas' => max(1, (int)ceil($total / $porPag)),
-         'artistas' => $artistas, 'catalogo' => count($todos)]);
+         'artistas' => $artistas, 'catalogo' => count($todos),
+         'completo' => (bool)$est['completo']]);
 }
 
 // ============ YOUTUBE (busca de trilha) ============

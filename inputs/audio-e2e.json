@@ -1,0 +1,10 @@
+{
+  "narracao": "Filmei a reação do meu pai. Mandei uma foto dele e virou uma obra de arte. Ele não esperava. Faça a do seu antes do Dia dos Pais — a prévia é grátis.",
+  "voz": "pt-BR-Neural2-B",
+  "estiloLegenda": "contorno",
+  "audio": { "ambiente": true, "musica": "emocional" },
+  "cenas": [
+    { "imagem": "inputs/pinturapai-v4.png", "prompt": "Authentic handheld smartphone footage look, vertical 9:16, photorealistic. Gentle slow push-in on the father holding the framed oil portrait at chest height, his moved grateful smile slowly deepening, eyes glistening. Natural window light, subtle camera sway, cozy home ambience. No text overlays.", "duracaoSegundos": 8 },
+    { "imagem": "inputs/pinturapai-v4.png", "prompt": "Authentic handheld smartphone footage look, vertical 9:16, photorealistic. Slow push toward the framed artwork clearly revealing the painted portrait, then soft settle back to the father's emotional face. Warm golden light, quiet room tone with soft fabric rustle. No text overlays.", "duracaoSegundos": 8 }
+  ]
+}

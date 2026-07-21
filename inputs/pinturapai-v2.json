@@ -1,0 +1,15 @@
+{
+  "narracao": "Todo Dia dos Pais, a mesma dúvida: o que dar que ele não jogue na gaveta? Manda uma foto do teu pai e a gente transforma numa arte pra parede da sala. Peça sua prévia grátis antes do Dia dos Pais.",
+  "voz": "pt-BR-Neural2-C",
+  "estiloLegenda": "contorno",
+  "cenas": [
+    {
+      "imagem": "inputs/pinturapai.png",
+      "prompt": "Cinematic vertical 9:16, photorealistic. A gentle slow push-in on an older father and his adult daughter in a warm living room. The father gazes down at the framed portrait he holds, an appreciative smile slowly forming; the daughter's arm rests around his shoulder as she looks at him with affection. Soft natural window light, subtle film grain, delicate natural motion. No text overlays."
+    },
+    {
+      "imagem": "inputs/pinturapai.png",
+      "prompt": "Cinematic vertical 9:16, photorealistic. A slow, smooth push toward the framed art print in the father's hands, clearly revealing the portrait, then a soft settle back to his emotional face as his eyes soften with gratitude. Warm golden light, shallow depth of field, gentle natural motion, identity of both faces and the framed artwork fully preserved. No text overlays."
+    }
+  ]
+}

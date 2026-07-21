@@ -28,7 +28,8 @@ CORES = {
     'branco': {'face': (242, 244, 244), 'clara': (255, 255, 255), 'escura': (205, 208, 208)},
     'marfim': {'face': (204, 224, 236), 'clara': (224, 240, 248), 'escura': (168, 190, 208)},  # BGR (marfim quente)
 }
-ASPECT = 3 / 4          # retrato 3:4 (uniforme entre as trocas, igual as camisetas)
+ASPECT_PADRAO = 3 / 4   # retrato 3:4 quando a arte já e' retrato
+ASPECT_MIN, ASPECT_MAX = 0.6, 1.7   # limites (evita quadro exageradamente fino/largo)
 BORDA_FRAC = 0.075      # largura da moldura procedural
 SOMBRA_BLUR = 31        # sombra portada (baked)
 SOMBRA_ALPHA = 110
@@ -44,10 +45,17 @@ def crop_aspect(img, aspect):
     return img[y0:y0 + nh, :]
 
 
-def moldura_procedural(arte, cor, largura):
+def aspecto_da_arte(arte):
+    """O quadro SEGUE a orientacao da arte: foto em pe' -> quadro em pe';
+    foto deitada -> quadro deitado. Nunca girar/espremer o que o Vitor subiu."""
+    h, w = arte.shape[:2]
+    return float(np.clip(w / h, ASPECT_MIN, ASPECT_MAX))
+
+
+def moldura_procedural(arte, cor, largura, aspect):
     """Borda flat com bevel + filete interno; devolve BGRA sem sombra."""
     c = CORES[cor]
-    alt = int(largura / ASPECT)
+    alt = int(largura / aspect)
     borda = int(largura * BORDA_FRAC)
     arte_w, arte_h = largura - 2 * borda, alt - 2 * borda
     arte_r = cv2.resize(arte, (arte_w, arte_h), interpolation=cv2.INTER_AREA)
@@ -72,11 +80,15 @@ def moldura_procedural(arte, cor, largura):
     return bgra
 
 
-def moldura_arabesco(arte, largura):
-    """Asset ornamentado: recorta do branco, warpa a arte no verde."""
+def moldura_arabesco(arte, largura, aspect):
+    """Asset ornamentado: recorta do branco, warpa a arte no verde.
+    O asset e' retrato — se a arte for deitada, gira a moldura 90 graus
+    (o ornamento e' simetrico, entao a leitura continua correta)."""
     asset = cv2.imread(ASSET_ARABESCO, cv2.IMREAD_COLOR)
     if asset is None:
         sys.exit(f'asset nao encontrado: {ASSET_ARABESCO}')
+    if aspect > 1.0:  # arte deitada -> moldura deitada
+        asset = cv2.rotate(asset, cv2.ROTATE_90_CLOCKWISE)
     # bbox da moldura = tudo que nao e' branco-quase-puro
     nao_branco = (asset.astype(int).sum(axis=2) < 720).astype(np.uint8) * 255
     nao_branco = cv2.morphologyEx(nao_branco, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
@@ -109,7 +121,7 @@ def moldura_arabesco(arte, largura):
 
     bgra = cv2.cvtColor(comp, cv2.COLOR_BGR2BGRA)
     bgra[..., 3] = alpha
-    alt = int(largura / ASPECT)
+    alt = int(largura / aspect)
     return cv2.resize(bgra, (largura, alt), interpolation=cv2.INTER_AREA)
 
 
@@ -144,15 +156,20 @@ def main():
     arte = cv2.imread(args.arte, cv2.IMREAD_COLOR)
     if arte is None:
         sys.exit(f'arte ilegivel: {args.arte}')
-    arte = crop_aspect(arte, ASPECT)  # 3:4 retrato, uniforme entre as trocas
+    # o quadro herda a ORIENTACAO da arte (nunca deitar uma foto em pe')
+    aspect = aspecto_da_arte(arte)
+    arte = crop_aspect(arte, aspect)   # so' apara o excesso, nao gira nada
+    # arte deitada com largura fixa ficaria gigante — normaliza pela area
+    largura = args.largura if aspect <= 1 else int(args.largura * 1.12)
 
     if args.moldura == 'arabesco':
-        quadro = moldura_arabesco(arte, args.largura)
+        quadro = moldura_arabesco(arte, largura, aspect)
     else:
-        quadro = moldura_procedural(arte, args.moldura, args.largura)
+        quadro = moldura_procedural(arte, args.moldura, largura, aspect)
     final = com_sombra(quadro)
     cv2.imwrite(args.out, final)
-    print(f'OK {args.moldura} {final.shape[1]}x{final.shape[0]} -> {args.out}')
+    orient = 'retrato' if aspect < 0.98 else ('quadrado' if aspect <= 1.02 else 'paisagem')
+    print(f'OK {args.moldura} {orient} ({aspect:.2f}) {final.shape[1]}x{final.shape[0]} -> {args.out}')
 
 
 if __name__ == '__main__':

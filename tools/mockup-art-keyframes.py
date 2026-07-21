@@ -194,14 +194,37 @@ def main():
         print(f"aspecto medido em {len(limpos)}/{len(aspects)} keyframes inteiros "
               f"(descartados os cortados na borda)")
 
-    # crop da arte pro aspecto real (mesmo crop em TODAS as cenas = mesmo produto)
+    # Encaixe da arte no quadro da CENA (que e' fixo, gerado nos keyframes).
+    # Se a orientacao da arte bate com a do quadro, corta o excesso (preenche).
+    # Se NAO bate (arte deitada num quadro em pe'), NUNCA espremer/girar: entra
+    # inteira com passe-partout em volta — e' o que uma moldureria faz de verdade.
     ah, aw = art.shape[:2]
-    if aw / ah > ref_aspect:
-        nw = int(ah * ref_aspect); x0 = (aw - nw) // 2
-        art_fit = art[:, x0:x0 + nw]
+    art_asp = aw / ah
+    mesma_orientacao = (art_asp > 1) == (ref_aspect > 1) or abs(art_asp - ref_aspect) < 0.18
+    if mesma_orientacao:
+        if art_asp > ref_aspect:
+            nw = int(ah * ref_aspect); x0 = (aw - nw) // 2
+            art_fit = art[:, x0:x0 + nw]
+        else:
+            nh = int(aw / ref_aspect); y0 = (ah - nh) // 2
+            art_fit = art[y0:y0 + nh, :]
     else:
-        nh = int(aw / ref_aspect); y0 = (ah - nh) // 2
-        art_fit = art[y0:y0 + nh, :]
+        # passe-partout: a arte cabe inteira, orientacao preservada
+        margem = 0.06
+        if art_asp > ref_aspect:                     # arte deitada, quadro em pe'
+            box_w = int(aw / (1 - 2 * margem))
+            box_h = int(box_w / ref_aspect)
+        else:                                        # arte em pe', quadro deitado
+            box_h = int(ah / (1 - 2 * margem))
+            box_w = int(box_h * ref_aspect)
+        art_fit = np.full((box_h, box_w, 3), (238, 240, 242), np.uint8)  # marfim claro
+        y0, x0 = (box_h - ah) // 2, (box_w - aw) // 2
+        art_fit[y0:y0 + ah, x0:x0 + aw] = art
+        # sombrinha do rebaixo da arte sobre o passe-partout
+        cv2.rectangle(art_fit, (x0 - 2, y0 - 2), (x0 + aw + 1, y0 + ah + 1), (176, 178, 182), 3)
+        print(f"arte {('deitada' if art_asp > 1 else 'em pe')} num quadro "
+              f"{('deitado' if ref_aspect > 1 else 'em pe')} — entrou inteira com passe-partout "
+              f"(orientacao preservada)")
     print(f"aspecto do quadro ~{ref_aspect:.3f}; arte cropada de {aw}x{ah} "
           f"para {art_fit.shape[1]}x{art_fit.shape[0]}")
     art_fit = season_art(art_fit)

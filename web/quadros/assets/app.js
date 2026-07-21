@@ -8,7 +8,7 @@ const app = $('#app');
 const S = {
   auth: false, tab: 'cenarios', screen: null, catFiltro: null, // null = home (pastas)
   cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
-  loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], carregando: false },
+  loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], carregando: false, completo: true },
   yt: { busca: '', videos: [], sel: null, inicio: 0, carregando: false },
   // form do mockup (artes = lote [{url,prev}]; cenarioIds = pool multi-select)
   mk: { formato: 'ugc', cenarioIds: [], artes: [], modo: 'sortear', movimento: 'medio', duracaoAlvo: 25, abertura: false,
@@ -20,7 +20,7 @@ const S = {
   // form do cenário (molduraId = da biblioteca; duplicarDe = herda avatar/ambiente)
   cn: { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
     nome: '', movimento: 'medio', temAbertura: false, duplicarDe: null, duplicarNome: '',
-    variacoes: 1, diversificar: 'avatar', categoria: 'ugc' },
+    variacoes: 1, diversificar: 'avatar', categoria: 'ugc', molduraPreset: 'preto' },
 };
 
 const VOZES = [
@@ -29,6 +29,18 @@ const VOZES = [
 ];
 const TRILHAS = ['nenhuma', 'emocional', 'energetica', 'epica', 'suave', 'misteriosa'];
 const LEGENDAS = [['nenhuma', 'Sem legenda'], ['caixa', 'Caixa preta'], ['contorno', 'Contorno']];
+// Mesmas 4 molduras do formato Ermos. No UGC a moldura e' 3D (a modelo segura),
+// entao vira descricao no prompt dos keyframes do cenario.
+const MOLDURAS_PRESET = [
+  ['preto', '⬛ Preto'], ['branco', '⬜ Branco'],
+  ['marfim', '🟨 Marfim'], ['arabesco', '👑 Arabesco'],
+];
+const MOLDURA_EN = {
+  preto: 'a thin matte-black wooden moulding',
+  branco: 'a clean matte-white wooden moulding',
+  marfim: 'a warm ivory wooden moulding with a subtle inner fillet',
+  arabesco: 'an ornate carved antique-gold moulding with arabesque scrollwork',
+};
 
 const IC = {
   cenarios: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
@@ -351,7 +363,7 @@ function viewLoja() {
   ].join('');
   shell(`
     <h2 class="view-t">🛍 Escolher da loja</h2>
-    <p class="view-sub">Atelier Malta · ${L.total} obra${L.total === 1 ? '' : 's'}${L.artista ? ` de <b>${esc(L.artista)}</b>` : ''}${L.busca ? ` com “${esc(L.busca)}”` : ''}. ${S.mk.artes.length ? `<b>${S.mk.artes.length} selecionada${S.mk.artes.length > 1 ? 's' : ''}</b>.` : 'Toque pra selecionar.'}</p>
+    <p class="view-sub">Atelier Malta · ${L.total} obra${L.total === 1 ? '' : 's'}${L.completo === false ? ' <b>(carregando o resto…)</b>' : ''}${L.artista ? ` de <b>${esc(L.artista)}</b>` : ''}${L.busca ? ` com “${esc(L.busca)}”` : ''}. ${S.mk.artes.length ? `<b>${S.mk.artes.length} selecionada${S.mk.artes.length > 1 ? 's' : ''}</b>.` : 'Toque pra selecionar.'}</p>
     <div class="field"><input type="text" id="lj-q" placeholder="buscar por obra ou artista…" value="${esc(L.busca)}"></div>
     <div class="field"><label>Artista</label><div class="chips">${artChips}</div></div>
     ${L.carregando ? '<div class="empty">carregando o catálogo…</div>'
@@ -388,8 +400,11 @@ async function carregaLoja() {
     S.loja.paginas = r.paginas || 1;
     S.loja.total = r.total || 0;
     if (r.artistas) S.loja.artistas = r.artistas;
+    S.loja.completo = r.completo !== false;
   } catch (e) { toast(e.message, true); }
   S.loja.carregando = false; render();
+  // catálogo grande vem em partes: continua puxando até completar
+  if (!S.loja.completo && S.screen === 'loja') setTimeout(() => carregaLoja(), 400);
 }
 
 // ---------- CATEGORIAS ----------
@@ -508,10 +523,16 @@ function viewNovoCenario() {
     <div class="field"><label>Avatar (opcional)</label><input type="text" id="f-av" placeholder="quem apresenta o quadro" value="${esc(c.avatarText)}"></div>
     <div class="field"><label>Ambiente (opcional)</label><input type="text" id="f-am" placeholder="onde é a cena" value="${esc(c.ambienteText)}"></div>`}
     <div class="field"><label>Moldura</label>
-      <div class="chips" style="margin-bottom:8px">${moldChips}</div>
+      <div class="chips" style="margin-bottom:8px">
+        ${MOLDURAS_PRESET.map(([id, lb]) => `<button class="chip ${c.molduraPreset === id && !c.molduraId ? 'on' : ''}" data-mpre="${id}">${lb}</button>`).join('')}
+        <button class="chip ${c.molduraPreset === 'livre' && !c.molduraId ? 'on' : ''}" data-mpre="livre">outra (texto)</button>
+      </div>
+      ${S.molduras.length ? `<div class="chips" style="margin-bottom:8px">${moldChips}</div>` : ''}
       ${c.molduraId
         ? `<div class="hint">A foto da biblioteca entra como referência — a moldura sai idêntica à real.</div>`
-        : `<input type="text" id="f-mo" placeholder="ex: preta fina fosca, dourada ornamentada, madeira clara" value="${esc(c.molduraText)}">`}
+        : (c.molduraPreset === 'livre'
+          ? `<input type="text" id="f-mo" placeholder="ex: prata escovada, nogueira, dupla dourada" value="${esc(c.molduraText)}">`
+          : `<div class="hint">Mesmas 4 molduras do formato Ermos — o quadro da cena sai com ela.</div>`)}
       <div class="hint" style="margin-top:6px">Quer usar uma moldura sua? <a href="#" id="go-mold2">Suba a foto na biblioteca</a>.</div>
     </div>
     <div class="field"><label>Movimento das cenas</label><div class="chips">${moveChips}</div></div>
@@ -534,6 +555,7 @@ function viewNovoCenario() {
   app.querySelectorAll('[data-move]').forEach((b) => b.onclick = () => { c.movimento = b.dataset.move; render(); });
   app.querySelectorAll('[data-mold]').forEach((b) => b.onclick = () => { c.molduraId = b.dataset.mold || null; render(); });
   app.querySelectorAll('[data-catsel]').forEach((b) => b.onclick = () => { c.categoria = b.dataset.catsel; render(); });
+  app.querySelectorAll('[data-mpre]').forEach((b) => b.onclick = () => { c.molduraPreset = b.dataset.mpre; c.molduraId = null; render(); });
   app.querySelectorAll('[data-varn]').forEach((b) => b.onclick = () => { c.variacoes = +b.dataset.varn; render(); });
   app.querySelectorAll('[data-divr]').forEach((b) => b.onclick = () => { c.diversificar = b.dataset.divr; render(); });
   $('#go-mold2').onclick = (e) => { e.preventDefault(); S.screen = 'molduras'; render(); };
@@ -541,17 +563,19 @@ function viewNovoCenario() {
   $('#cen-back').onclick = () => { S.screen = null; render(); };
   $('#cen-go').onclick = async () => {
     if (!dup && !c.descricao.trim() && (!c.avatarText.trim() || !c.ambienteText.trim())) return toast('descreva ao menos avatar e ambiente', true);
-    if (dup && !c.molduraId && !c.molduraText.trim()) return toast('escolha a moldura nova', true);
+    if (dup && !c.molduraId && c.molduraPreset === 'livre' && !c.molduraText.trim()) return toast('escolha a moldura nova', true);
     try {
-      const moldNome = c.molduraId ? (S.molduras.find((m) => m.id === c.molduraId)?.nome || '') : c.molduraText;
+      const molduraTexto = c.molduraId ? '' : (c.molduraPreset === 'livre' ? c.molduraText : MOLDURA_EN[c.molduraPreset]);
+      const moldNome = c.molduraId ? (S.molduras.find((m) => m.id === c.molduraId)?.nome || '')
+        : (c.molduraPreset === 'livre' ? c.molduraText : (MOLDURAS_PRESET.find(([i]) => i === c.molduraPreset)?.[1] || '').replace(/[^\w áéíóúâêôãõç]/gi,'').trim());
       const nome = dup
         ? `${c.duplicarNome.split('·')[0].trim()} · ${moldNome.slice(0, 18)}`
         : (c.nome || (c.ambienteText || c.descricao).slice(0, 30));
-      await api('queue_cenario', { body: { ...c, nome, variacoes: dup ? 1 : c.variacoes } });
+      await api('queue_cenario', { body: { ...c, molduraText: molduraTexto, nome, variacoes: dup ? 1 : c.variacoes } });
       const nPalcos = dup ? 1 : c.variacoes;
       S.cn = { descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
         nome: '', movimento: 'medio', temAbertura: false, duplicarDe: null, duplicarNome: '',
-        variacoes: 1, diversificar: 'avatar', categoria: c.categoria };
+        variacoes: 1, diversificar: 'avatar', categoria: c.categoria, molduraPreset: 'preto' };
       S.screen = null; S.tab = 'fila'; await refresh();
       toast(nPalcos > 1 ? `gerando ${nPalcos} palcos — acompanhe na Fila` : 'gerando o palco — acompanhe na Fila');
     } catch (e) { toast(e.message, true); }

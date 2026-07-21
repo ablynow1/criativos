@@ -1,0 +1,32 @@
+{
+  "narracao": "Cansado de presentes sem graça pro seu pai? Este ano, dê algo único. Transforme uma foto dele numa obra de arte inesquecível. Um presente que ele vai guardar pra sempre. Peça sua prévia grátis e emocione!",
+  "voz": "pt-BR-Neural2-C",
+  "estiloLegenda": "contorno",
+  "cenas": [
+    {
+      "imagem": "inputs/pinturapai.png",
+      "prompt": "Cinematic, photorealistic shot. A gentle push-in and subtle pan from the framed artwork, clearly visible in the father's hands, moving upwards to his face, capturing his soft, appreciative smile as he looks at the portrait. The adult child's arm is subtly visible around his shoulder. Soft, warm lighting."
+    },
+    {
+      "imagem": "inputs/pinturapai.png",
+      "prompt": "Cinematic, photorealistic shot. A slow, subtle push-in on the father's face, emphasizing the emotional connection and gratitude in his eyes as he holds the framed artwork. The adult child's hand gently rests on his shoulder. Soft, warm lighting, slight depth of field."
+    }
+  ],
+  "_briefing": {
+    "produto": "Pintura do Pai - Arte personalizada",
+    "publicoAlvo": "Filhos(as) adultos(as) (25-45 anos) que desejam presentear seus pais (50-70 anos) no Dia dos Pais com algo único e emocional, evitando presentes clichês. Buscam expressar admiração e carinho de forma memorável.",
+    "tom": "Emocional, afetuoso, inspirador, com um toque de urgência (Dia dos Pais) e exclusividade.",
+    "narracao": "Cansado de presentes sem graça pro seu pai? Este ano, dê algo único. Transforme uma foto dele numa obra de arte inesquecível. Um presente que ele vai guardar pra sempre. Peça sua prévia grátis e emocione!",
+    "voz": "pt-BR-Neural2-C",
+    "imagemPrompt": "A heartwarming portrait-oriented 9:16 photograph of a proud, wise-looking father in his late 50s-early 60s, with a gentle smile, holding a beautifully framed art print of himself (in an oil painting style). His adult son/daughter (late 20s-early 30s) stands beside him, smiling affectionately, with an arm around his shoulder. They are in a warmly lit living room, soft natural light coming from a window. The father's eyes are filled with emotion and appreciation as he looks at the artwork, which is clearly visible. The scene captures a moment of deep connection and gratitude. Photorealistic, cinematic lighting.",
+    "cenas": [
+      {
+        "prompt": "Cinematic, photorealistic shot. A gentle push-in and subtle pan from the framed artwork, clearly visible in the father's hands, moving upwards to his face, capturing his soft, appreciative smile as he looks at the portrait. The adult child's arm is subtly visible around his shoulder. Soft, warm lighting."
+      },
+      {
+        "prompt": "Cinematic, photorealistic shot. A slow, subtle push-in on the father's face, emphasizing the emotional connection and gratitude in his eyes as he holds the framed artwork. The adult child's hand gently rests on his shoulder. Soft, warm lighting, slight depth of field."
+      }
+    ]
+  },
+  "_url": "https://atelier.usemalta.com/pinturapai/"
+}

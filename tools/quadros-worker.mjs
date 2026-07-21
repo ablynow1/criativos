@@ -288,8 +288,40 @@ async function processErmos(job) {
   log(`✅ ermos ${job.id} pronto — ${(videoBuf.length / 1e6).toFixed(1)}MB`);
 }
 
+// O Hostgator trava a saída pra Shopify depois de ~2 páginas; aqui do Mac vai
+// liso. Puxa o catálogo inteiro e empurra pro painel (a cada 6h).
+const LOJA = process.env.LOJA_URL || 'https://ateliermalta.com.br';
+async function sincronizaCatalogo() {
+  try {
+    const todos = [];
+    for (let page = 1; page <= 60; page += 1) {
+      const r = await fetch(`${LOJA}/products.json?limit=250&page=${page}`,
+        { headers: { 'User-Agent': 'QuadrosStudio/1.0' } });
+      if (!r.ok) break;
+      const lote = (await r.json()).products || [];
+      for (const p of lote) {
+        const img = p.images?.[0]?.src;
+        if (img) todos.push({ titulo: p.title, img, artista: p.vendor || '' });
+      }
+      if (lote.length < 250) break;
+    }
+    if (!todos.length) return log('⚠️ catálogo da loja veio vazio');
+    const res = await fetch(`${BASE}/api.php?action=worker_catalogo`, {
+      method: 'POST',
+      headers: { 'X-Quadros-Token': TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify(todos),
+    });
+    const d = await res.json().catch(() => null);
+    log(d?.ok ? `🛍  catálogo sincronizado: ${d.guardados} obras` : `⚠️ falha ao subir catálogo: ${d?.error}`);
+  } catch (e) {
+    log(`⚠️ sincronia do catálogo falhou: ${String(e.message).slice(0, 120)}`);
+  }
+}
+
 async function loop() {
   log(`Quadros worker ligado → ${BASE} (poll ${POLL_MS / 1000}s). Ctrl+C pra parar.`);
+  sincronizaCatalogo();                                   // na subida
+  setInterval(sincronizaCatalogo, 6 * 60 * 60 * 1000);    // e a cada 6h
   for (;;) {
     try {
       const { job } = await call('worker_poll');

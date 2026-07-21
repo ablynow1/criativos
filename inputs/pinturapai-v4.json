@@ -1,0 +1,15 @@
+{
+  "narracao": "Meu pai jura que não quer nada no Dia dos Pais. Mandei uma foto dele e transformei numa arte pra parede da sala. Quando ele viu, sorriu igual criança. Faça a do seu antes do Dia dos Pais — a prévia é grátis.",
+  "voz": "pt-BR-Neural2-B",
+  "estiloLegenda": "contorno",
+  "cenas": [
+    {
+      "imagem": "inputs/pinturapai-v4.png",
+      "prompt": "Cinematic vertical 9:16, photorealistic. A gentle slow push-in on an older father sitting in a warm living room, looking down at the framed oil-painting portrait of himself that he holds at chest height. His moved, grateful smile slowly deepens and his eyes glisten; he gives a soft breath of emotion. Soft natural window light, subtle film grain, delicate natural motion. No text overlays."
+    },
+    {
+      "imagem": "inputs/pinturapai-v4.png",
+      "prompt": "Cinematic vertical 9:16, photorealistic. A slow smooth push toward the framed oil painting, clearly revealing the classical oil portrait inside the ornate gilded frame, then a soft settle back up to the father's emotional, grateful face as he looks at it. Warm golden light, shallow depth of field, gentle natural motion, identity of the man and the painted portrait fully preserved. No text overlays."
+    }
+  ]
+}
