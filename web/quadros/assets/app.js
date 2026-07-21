@@ -812,12 +812,21 @@ function viewNovoErmos(fmtChips, bindFmt) {
     return;
   }
   if (!m.fundoIds.length) m.fundoIds = [prontos[0].id];
-  // miniaturas dos lugares (dá pra ver o cenário sem sair do form)
-  const fundoChips = prontos.map((f) => `<button class="fnd-card ${m.fundoIds.includes(f.id) ? 'on' : ''}" data-fnd="${esc(f.id)}">
-    <img src="${esc(f.thumb)}" alt="" loading="lazy">
-    <span>${esc(f.nome)}</span>
-    ${m.fundoIds.includes(f.id) ? '<i class="fnd-ok">✓</i>' : ''}
-  </button>`).join('');
+  // TODOS os lugares aparecem aqui, inclusive os que ainda não foram ativados
+  // — antes o form só listava os prontos e os novos ficavam invisíveis pra
+  // quem não sabia que existia uma biblioteca separada.
+  const fundoChips = S.fundos.map((f) => {
+    const pronto = f.status === 'pronto';
+    const sel = pronto && m.fundoIds.includes(f.id);
+    const tag = f.status === 'gerando' ? 'ativando…'
+      : f.status === 'erro' ? 'falhou — tocar de novo' : 'tocar pra ativar';
+    return `<button class="fnd-card ${sel ? 'on' : ''} ${pronto ? '' : 'off'}" data-fnd="${esc(f.id)}">
+      <img src="${esc(f.thumb)}" alt="" loading="lazy">
+      <span>${esc(f.nome)}</span>
+      ${sel ? '<i class="fnd-ok">✓</i>' : ''}
+      ${pronto ? '' : `<i class="fnd-tag">${tag}</i>`}
+    </button>`;
+  }).join('');
   const moldBtns = MOLDURAS_PRESET
     .map(([id, lb]) => chipMoldura(id, lb, m.moldura2d === id, 'data-m2d')).join('');
   const ritmoChips = [[0.2, '⚡ 0,2s'], [0.3, '0,3s'], [0.5, '0,5s'], [0.8, '0,8s'], [1.2, '🐢 1,2s']]
@@ -874,8 +883,21 @@ function viewNovoErmos(fmtChips, bindFmt) {
       : `Renderizar${m.artes.length ? ` · ${m.artes.length} arte${m.artes.length > 1 ? 's' : ''}` : ''}`}</button>
   `);
   bindFmt();
-  app.querySelectorAll('[data-fnd]').forEach((b) => b.onclick = () => {
-    const id = b.dataset.fnd; const i = m.fundoIds.indexOf(id);
+  app.querySelectorAll('[data-fnd]').forEach((b) => b.onclick = async () => {
+    const id = b.dataset.fnd;
+    const f = S.fundos.find((x) => x.id === id);
+    // lugar ainda não ativado: o toque manda gerar aqui mesmo (é o Veo que
+    // faz o vídeo do lugar — uma vez só, depois ele é reusado de graça)
+    if (f && f.status !== 'pronto') {
+      if (f.status === 'gerando') return toast(`${f.nome} já está sendo gerado`, true);
+      try {
+        await api('queue_fundo', { body: { id } });
+        await refresh();
+        toast(`${f.nome}: ativando — leva alguns minutos`);
+      } catch (e) { toast(e.message, true); }
+      return;
+    }
+    const i = m.fundoIds.indexOf(id);
     if (i >= 0) { if (m.fundoIds.length > 1) m.fundoIds.splice(i, 1); } else m.fundoIds.push(id);
     render();
   });

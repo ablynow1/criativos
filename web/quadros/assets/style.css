@@ -213,6 +213,12 @@ nav.tabs button.on { background:var(--gold); color:#1a1206; }
 .fnd-card span { display:block; font-size:11px; padding:5px 7px; line-height:1.25; color:var(--muted); }
 .fnd-card.on { border-color:var(--gold); }
 .fnd-card.on span { color:var(--gold); font-weight:650; }
+/* lugar ainda não ativado: aparece na grade, apagado, com o que fazer escrito */
+.fnd-card.off img { opacity:.42; filter:saturate(.5); }
+.fnd-tag { position:absolute; top:8px; left:8px; right:8px; font-style:normal;
+  font-size:10px; font-weight:700; letter-spacing:.03em; text-align:center;
+  padding:4px 6px; border-radius:20px; background:#0d0d0fd9; color:var(--gold);
+  border:1px solid var(--line-2); }
 .fnd-ok { position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%;
   background:var(--gold); color:#1a1206; font-size:12px; font-weight:700; font-style:normal;
   display:grid; place-items:center; }
