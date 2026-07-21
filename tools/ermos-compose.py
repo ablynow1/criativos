@@ -4,10 +4,10 @@
 E' o "produto flutuante" que sobrepoe o video de fundo (replica da estrutura
 do ad Ermos: camiseta flutuando -> aqui, quadro emoldurado flutuando).
 
-Molduras:
-  preto | branco | marfim  -> procedurais (borda flat com bevel sutil + filete)
-  arabesco                 -> asset ornamentado (tools/assets/moldura-arabesco.png,
-                              interior verde chroma; a arte e' warpada no verde)
+Molduras: TODAS sao foto de moldura REAL do Vitor (tools/assets/moldura-*.png,
+interior verde chroma; a arte e' warpada no verde). Nada de moldura desenhada
+em codigo — o anuncio mostra a moldura que ele de fato vende.
+Pra somar uma moldura nova: tools/moldura-foto.py converte a foto crua.
 
 Uso:
   tools/.venv-compose/bin/python tools/ermos-compose.py \
@@ -21,13 +21,14 @@ import sys
 import cv2
 import numpy as np
 
-ASSET_ARABESCO = os.path.join(os.path.dirname(__file__), 'assets', 'moldura-arabesco.png')
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
+MOLDURAS = ['preto', 'branco', 'marfim', 'arabesco']
 
-CORES = {
-    'preto':  {'face': (26, 26, 26),    'clara': (56, 56, 56),    'escura': (10, 10, 10)},
-    'branco': {'face': (242, 244, 244), 'clara': (255, 255, 255), 'escura': (205, 208, 208)},
-    'marfim': {'face': (204, 224, 236), 'clara': (224, 240, 248), 'escura': (168, 190, 208)},  # BGR (marfim quente)
-}
+
+def caminho_asset(nome):
+    return os.path.join(ASSETS_DIR, f'moldura-{nome}.png')
+
+
 # TAMANHO UNICO por orientacao. O acervo NAO e' padronizado (as verticais vao
 # de 0.60 a 0.96), entao derivar o quadro da arte fazia a moldura mudar de
 # tamanho a cada troca. Agora a moldura e' sempre a mesma e quem muda e' so' a
@@ -38,7 +39,6 @@ ASPECT_PAISAGEM = 1.414
 ASPECT_QUADRADO = 1.0
 PP_COR = (238, 240, 242)  # BGR — passe-partout marfim de museu
 PP_MARGEM = 0.05          # margem minima do passe-partout (fracao do menor lado)
-BORDA_FRAC = 0.075      # largura da moldura procedural
 SOMBRA_BLUR = 31        # sombra portada (baked)
 SOMBRA_ALPHA = 110
 SOMBRA_DESLOC = 18
@@ -77,49 +77,34 @@ def aspecto_padrao(arte):
     return ASPECT_QUADRADO
 
 
-def moldura_procedural(arte, cor, largura, aspect):
-    """Borda flat com bevel + filete interno; devolve BGRA sem sombra."""
-    c = CORES[cor]
-    alt = int(largura / aspect)
-    borda = int(largura * BORDA_FRAC)
-    arte_w, arte_h = largura - 2 * borda, alt - 2 * borda
-    arte_r = painel(arte, arte_w, arte_h)
-
-    quadro = np.zeros((alt, largura, 3), np.uint8)
-    quadro[:] = c['face']
-    # bevel: luz em cima/esquerda, sombra embaixo/direita (45°)
-    bl = max(2, borda // 6)
-    quadro[:bl, :] = c['clara']; quadro[:, :bl] = c['clara']
-    quadro[-bl:, :] = c['escura']; quadro[:, -bl:] = c['escura']
-    # filete interno (linha fina separando moldura/arte, dá leitura de encaixe)
-    f0 = borda - max(2, bl // 2)
-    cv2.rectangle(quadro, (f0, f0), (largura - f0, alt - f0), c['escura'], max(1, bl // 2))
-    # arte + leve sombra interna no perímetro (assenta a arte)
-    quadro[borda:borda + arte_h, borda:borda + arte_w] = arte_r
-    m = np.zeros((alt, largura), np.float32)
-    cv2.rectangle(m, (borda, borda), (largura - borda, alt - borda), 1.0, max(2, bl))
-    m = cv2.GaussianBlur(m, (0, 0), bl)
-    quadro = np.clip(quadro.astype(np.float32) * (1 - 0.35 * m[..., None]), 0, 255).astype(np.uint8)
-
-    bgra = cv2.cvtColor(quadro, cv2.COLOR_BGR2BGRA)
-    return bgra
+def carrega_asset(nome):
+    """Devolve (BGR, alpha) da foto da moldura. Assets novos (moldura-foto.py)
+    ja' vem com alpha; o arabesco e' legado em fundo branco — ali a mascara sai
+    do proprio branco. Por isso o alpha existe: numa moldura BRANCA nao da'
+    pra separar o pau do fundo por cor."""
+    caminho = caminho_asset(nome)
+    img = cv2.imread(caminho, cv2.IMREAD_UNCHANGED)
+    if img is None:
+        sys.exit(f'asset nao encontrado: {caminho} — rode o tools/moldura-foto.py')
+    if img.ndim == 3 and img.shape[2] == 4:
+        return img[..., :3].copy(), img[..., 3].copy()
+    bgr = img if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    alpha = cv2.morphologyEx((bgr.astype(int).sum(axis=2) < 720).astype(np.uint8) * 255,
+                             cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+    return bgr, alpha
 
 
-def moldura_arabesco(arte, largura, aspect):
-    """Asset ornamentado: recorta do branco, warpa a arte no verde.
-    O asset e' retrato — se a arte for deitada, gira a moldura 90 graus
-    (o ornamento e' simetrico, entao a leitura continua correta)."""
-    asset = cv2.imread(ASSET_ARABESCO, cv2.IMREAD_COLOR)
-    if asset is None:
-        sys.exit(f'asset nao encontrado: {ASSET_ARABESCO}')
+def moldura_asset(arte, nome, largura, aspect):
+    """Foto de moldura real: recorta, warpa o painel no miolo verde.
+    O asset e' retrato — se a arte for deitada, gira a moldura 90 graus."""
+    fr, alpha = carrega_asset(nome)
     if aspect > 1.0:  # arte deitada -> moldura deitada
-        asset = cv2.rotate(asset, cv2.ROTATE_90_CLOCKWISE)
-    # bbox da moldura = tudo que nao e' branco-quase-puro
-    nao_branco = (asset.astype(int).sum(axis=2) < 720).astype(np.uint8) * 255
-    nao_branco = cv2.morphologyEx(nao_branco, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
-    ys, xs = np.where(nao_branco > 0)
+        fr = cv2.rotate(fr, cv2.ROTATE_90_CLOCKWISE)
+        alpha = cv2.rotate(alpha, cv2.ROTATE_90_CLOCKWISE)
+    ys, xs = np.where(alpha > 20)
     y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
-    fr = asset[y0:y1 + 1, x0:x1 + 1]
+    fr = fr[y0:y1 + 1, x0:x1 + 1]
+    alpha_fr = alpha[y0:y1 + 1, x0:x1 + 1]
 
     # quad verde -> warp da arte (mesma tecnica do art-keyframes)
     hsv = cv2.cvtColor(fr, cv2.COLOR_BGR2HSV)
@@ -139,18 +124,22 @@ def moldura_arabesco(arte, largura, aspect):
     src = np.array([[0, 0], [aw, 0], [aw, ah], [0, ah]], np.float32)
     H = cv2.getPerspectiveTransform(src, quad)
     warp = cv2.warpPerspective(pnl, H, (fr.shape[1], fr.shape[0]), flags=cv2.INTER_LINEAR)
+    # o verde some ANTES da composicao: no subpixel da borda o warp nao cobre
+    # 100% do miolo e sobrava um fio verde em volta do passe-partout
+    fr = fr.copy()
+    fr[cv2.dilate(verde, np.ones((5, 5), np.uint8)) > 0] = PP_COR
     alpha_arte = (cv2.GaussianBlur(verde, (3, 3), 0).astype(np.float32) / 255)[..., None]
     comp = (warp * alpha_arte + fr * (1 - alpha_arte)).astype(np.uint8)
 
-    # alpha do quadro: moldura + interior (fecha buracos), fora = transparente
-    solido = cv2.morphologyEx(((comp.astype(int).sum(axis=2) < 720) | (verde > 0)).astype(np.uint8) * 255,
+    # alpha do quadro: o do asset, com o miolo somado e os buracos fechados
+    solido = cv2.morphologyEx(((alpha_fr > 20) | (verde > 0)).astype(np.uint8) * 255,
                               cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
     cnts2, _ = cv2.findContours(solido, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    alpha = np.zeros(solido.shape, np.uint8)
-    cv2.drawContours(alpha, [max(cnts2, key=cv2.contourArea)], -1, 255, -1)
+    alpha_out = np.zeros(solido.shape, np.uint8)
+    cv2.drawContours(alpha_out, [max(cnts2, key=cv2.contourArea)], -1, 255, -1)
 
     bgra = cv2.cvtColor(comp, cv2.COLOR_BGR2BGRA)
-    bgra[..., 3] = alpha
+    bgra[..., 3] = alpha_out
     alt = int(largura / aspect)
     return cv2.resize(bgra, (largura, alt), interpolation=cv2.INTER_AREA)
 
@@ -178,7 +167,7 @@ def com_sombra(bgra):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--arte', required=True)
-    ap.add_argument('--moldura', required=True, choices=['preto', 'branco', 'marfim', 'arabesco'])
+    ap.add_argument('--moldura', required=True, choices=MOLDURAS)
     ap.add_argument('--out', required=True)
     ap.add_argument('--largura', type=int, default=900)
     ap.add_argument('--aspecto', type=float, default=None,
@@ -194,10 +183,7 @@ def main():
     aspect = args.aspecto if args.aspecto else aspecto_padrao(arte)
     largura = args.largura
 
-    if args.moldura == 'arabesco':
-        quadro = moldura_arabesco(arte, largura, aspect)
-    else:
-        quadro = moldura_procedural(arte, args.moldura, largura, aspect)
+    quadro = moldura_asset(arte, args.moldura, largura, aspect)
     final = com_sombra(quadro)
     cv2.imwrite(args.out, final)
     orient = 'retrato' if aspect < 0.98 else ('quadrado' if aspect <= 1.02 else 'paisagem')

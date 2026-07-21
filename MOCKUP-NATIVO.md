@@ -170,6 +170,17 @@ abertura fixa a obra entra **inteira sobre passe-partout** (`painel()` no
 encaixar seria mutilar a pintura — e vender um recorte do que o cliente compra
 inteiro.
 
+**As 4 molduras são FOTO das molduras reais** (`tools/assets/moldura-*.png`,
+miolo verde chroma). Nenhuma é desenhada em código: o anúncio mostra a moldura
+que ele de fato vende. Pra somar uma nova, `tools/moldura-foto.py` recebe a
+foto crua de celular — acha a moldura contra o chão pela distância em Lab
+*somada à saturação* (madeira clara tem a luminância do concreto; o que a
+separa é ser quente), retifica pelos 4 cantos, acha a boca comparando cada
+lado com a cor do **seu próprio** pau (a lateral sombreada é tão escura quanto
+o kraft) e apara a franja do verso que aparece por a foto ser de cima. Sai com
+alpha porque em moldura **branca** não dá pra separar o pau do fundo por cor.
+`tools/moldura-thumbs.py` publica as miniaturas do seletor.
+
 **Refazer** (`requeue_ermos`): clona um Ermos pronto trocando só a moldura
 e/ou os lugares; artes, ritmo, duração, trilha e legenda vêm do snapshot
 original. É o jeito barato de comparar variações do mesmo criativo — não passa

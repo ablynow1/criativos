@@ -2,6 +2,10 @@
 """Converte a FOTO de uma moldura real (PNG com fundo transparente OU branco)
 no asset padrao do modo Ermos: moldura + interior VERDE chroma + fundo branco.
 
+ATENCAO: pra foto CRUA de celular (moldura no chao, fundo de concreto, em
+angulo) use o tools/moldura-foto.py — ele recorta, endireita e sai com alpha.
+Este aqui so' serve se a moldura ja' vier recortada em fundo liso.
+
 E' o formato que o ermos-compose.py espera pra warpar a arte no miolo.
 Uso (a cada moldura nova que o Vitor mandar):
   tools/.venv-compose/bin/python tools/moldura-asset.py \

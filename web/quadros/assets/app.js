@@ -33,9 +33,13 @@ const LEGENDAS = [['nenhuma', 'Sem legenda'], ['caixa', 'Caixa preta'], ['contor
 // Mesmas 4 molduras do formato Ermos. No UGC a moldura e' 3D (a modelo segura),
 // entao vira descricao no prompt dos keyframes do cenario.
 const MOLDURAS_PRESET = [
-  ['preto', '⬛ Preto'], ['branco', '⬜ Branco'],
-  ['marfim', '🟨 Marfim'], ['arabesco', '👑 Arabesco'],
+  ['preto', 'Preto'], ['branco', 'Branco'],
+  ['marfim', 'Marfim'], ['arabesco', 'Arabesco'],
 ];
+// o botão mostra a FOTO da moldura de verdade — emoji não diz qual pau é
+const chipMoldura = (id, lb, ativo, attr) =>
+  `<button class="chip mol ${ativo ? 'on' : ''}" ${attr}="${id}">
+     <img src="assets/molduras/${id}.jpg" alt="">${lb}</button>`;
 const MOLDURA_EN = {
   preto: 'a thin matte-black wooden moulding',
   branco: 'a clean matte-white wooden moulding',
@@ -607,7 +611,7 @@ function viewNovoCenario() {
     <div class="field"><label>Ambiente (opcional)</label><input type="text" id="f-am" placeholder="onde é a cena" value="${esc(c.ambienteText)}"></div>`}
     <div class="field"><label>Moldura</label>
       <div class="chips" style="margin-bottom:8px">
-        ${MOLDURAS_PRESET.map(([id, lb]) => `<button class="chip ${c.molduraPreset === id && !c.molduraId ? 'on' : ''}" data-mpre="${id}">${lb}</button>`).join('')}
+        ${MOLDURAS_PRESET.map(([id, lb]) => chipMoldura(id, lb, c.molduraPreset === id && !c.molduraId, 'data-mpre')).join('')}
         <button class="chip ${c.molduraPreset === 'livre' && !c.molduraId ? 'on' : ''}" data-mpre="livre">outra (texto)</button>
       </div>
       ${S.molduras.length ? `<div class="chips" style="margin-bottom:8px">${moldChips}</div>` : ''}
@@ -814,8 +818,8 @@ function viewNovoErmos(fmtChips, bindFmt) {
     <span>${esc(f.nome)}</span>
     ${m.fundoIds.includes(f.id) ? '<i class="fnd-ok">✓</i>' : ''}
   </button>`).join('');
-  const moldBtns = [['preto', '⬛ Preto'], ['branco', '⬜ Branco'], ['marfim', '🟨 Marfim'], ['arabesco', '👑 Arabesco']]
-    .map(([id, lb]) => `<button class="chip ${m.moldura2d === id ? 'on' : ''}" data-m2d="${id}">${lb}</button>`).join('');
+  const moldBtns = MOLDURAS_PRESET
+    .map(([id, lb]) => chipMoldura(id, lb, m.moldura2d === id, 'data-m2d')).join('');
   const ritmoChips = [[0.2, '⚡ 0,2s'], [0.3, '0,3s'], [0.5, '0,5s'], [0.8, '0,8s'], [1.2, '🐢 1,2s']]
     .map(([v, lb]) => `<button class="chip ${m.ritmo === v ? 'on' : ''}" data-rit="${v}">${lb}</button>`).join('');
   const durChipsEr = [6, 8, 10, 15].map((v) => `<button class="chip ${m.duracaoErmos === v ? 'on' : ''}" data-durer="${v}">${v}s</button>`).join('');
@@ -973,7 +977,7 @@ function refazerHtml(j) {
   if (!R || R.id !== j.id) return '';
   const prontos = S.fundos.filter((f) => f.status === 'pronto');
   const molBtns = MOLDURAS_PRESET.map(([id, nome]) =>
-    `<button class="chip ${R.moldura === id ? 'on' : ''}" data-rf-mol="${id}">${nome}</button>`).join('');
+    chipMoldura(id, nome, R.moldura === id, 'data-rf-mol')).join('');
   const lugBtns = prontos.map((f) =>
     `<button class="chip ${R.fundoIds.includes(f.id) ? 'on' : ''}" data-rf-fun="${esc(f.id)}">${esc(f.nome)}</button>`).join('');
   const mudou = R.moldura !== R.origMoldura || R.fundoIds.join() !== R.origFundos.join();
