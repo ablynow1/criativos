@@ -22,6 +22,7 @@ export async function mergeFinal({
   subtitleStyle = 'caixa',
   musicPath = null,   // WAV/MP3 da trilha (opcional)
   ambiente = true,    // usa o som nativo dos clipes como camada ambiente
+  marginV = null,     // px do rodapé pra legenda (zona segura do Reels)
 }) {
   // --- 1) concatena os clipes preservando o áudio nativo ---
   let videoInput = clipPaths[0];
@@ -57,7 +58,15 @@ export async function mergeFinal({
 
   // --- 2) monta o filtergraph da mixagem ---
   const srtEscaped = srtPath.replace(/:/g, '\\:');
-  const styleString = getSubtitleStyle(subtitleStyle);
+  let styleString = getSubtitleStyle(subtitleStyle);
+  // `marginV` (opcional): sobe a legenda pra fora da UI do Instagram. O Reels
+  // cobre ~450px no rodapé — sem isso a legenda nasce atrás dos botões.
+  // Só quem passa o parâmetro muda (o Cricri segue com o padrão dele).
+  if (marginV) {
+    styleString = /MarginV=\d+/.test(styleString)
+      ? styleString.replace(/MarginV=\d+/, `MarginV=${marginV}`)
+      : `${styleString},MarginV=${marginV}`;
+  }
 
   const args = ['-i', videoInput, '-i', narrationAudioPath];
   if (useMusic) args.push('-i', musicPath);

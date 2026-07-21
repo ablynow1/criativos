@@ -27,6 +27,19 @@ import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
 const PY = 'tools/.venv-compose/bin/python';
 const COMPOSE = 'tools/ermos-compose.py';
 const FONTE = '/System/Library/Fonts/Helvetica.ttc';
+const LOGO_PADRAO = 'tools/assets/logo-atelier.png'; // Atelier by Malta (SVG do Vitor)
+
+// ZONA DE SEGURANÇA do Reels (canvas 1080x1920):
+// a UI do Instagram come 220px no topo e 450px no rodapé — nada escrito pode
+// cair aí. Os 1080x1440 de cima são a CAPA que aparece no perfil.
+const SAFE_TOP = 220;
+const SAFE_BOTTOM = 450;
+const CAPA_H = 1440;
+const LOGO_W = 300;
+// o quadro vive entre a logo e a legenda, centrado na área da CAPA
+const QUADRO_W = 700;
+const QUADRO_H = Math.round(QUADRO_W * 4 / 3); // ~933 (proporção 3:4 + sombra)
+const QUADRO_Y = Math.round((CAPA_H + SAFE_TOP + 110 - QUADRO_H) / 2);
 
 function parseArgs(argv) {
   const args = {};
@@ -114,29 +127,36 @@ async function main() {
   console.log('[3/3] compondo o produto flutuante…');
   const oIn = ['-i', base];
   quadros.forEach((q) => oIn.push('-i', q));
-  const temLogo = cfg.logoPath && existsSync(cfg.logoPath);
-  if (temLogo) oIn.push('-i', cfg.logoPath);
+  // logo: a do usuário se mandou; senão a padrão (Atelier by Malta); 'nenhuma' desliga
+  const logoEscolhida = cfg.logoPath && existsSync(cfg.logoPath) ? cfg.logoPath
+    : (cfg.semLogo ? null : (existsSync(LOGO_PADRAO) ? LOGO_PADRAO : null));
+  const temLogo = !!logoEscolhida;
+  if (temLogo) oIn.push('-i', logoEscolhida);
   if (musicPath) oIn.push('-i', musicPath);
 
   let of = '';
   let cur = '[0:v]';
   const N = quadros.length;
   const R = ritmo.toFixed(3);
+  // Tudo escrito fica dentro do quadro seguro do Reels (1080x1920):
+  // a UI do Instagram cobre o topo (220px) e o rodapé (450px). Além disso os
+  // 1080x1440 de cima são a CAPA do Reels no perfil — o quadro mora aí.
   quadros.forEach((_, i) => {
-    of += `[${i + 1}:v]scale=760:-1[q${i}];`;
+    of += `[${i + 1}:v]scale=${QUADRO_W}:-1[q${i}];`;
     // ALTERNÂNCIA CÍCLICA: o slot atual é floor(t/ritmo); a arte i aparece
     // sempre que slot % N == i — as artes se revezam do início ao fim.
-    of += `${cur}[q${i}]overlay=(W-w)/2:(H-h)/2-40:enable='eq(mod(floor(t/${R}),${N}),${i})'[o${i}];`;
+    of += `${cur}[q${i}]overlay=(W-w)/2:${QUADRO_Y}:enable='eq(mod(floor(t/${R}),${N}),${i})'[o${i}];`;
     cur = `[o${i}]`;
   });
   if (temLogo) {
-    of += `[${quadros.length + 1}:v]scale=190:-1[lg];`;
-    of += `${cur}[lg]overlay=(W-w)/2:96[olg];`;
+    of += `[${quadros.length + 1}:v]scale=${LOGO_W}:-1[lg];`;
+    of += `${cur}[lg]overlay=(W-w)/2:${SAFE_TOP + 18}[olg];`;
     cur = '[olg]';
   }
   const legenda = (cfg.legenda || 'TODAS AS OBRAS JÁ DISPONÍVEIS EM NOSSO SITE')
     .toUpperCase().replace(/[\\:'"]/g, ' ');
-  of += `${cur}drawtext=fontfile=${FONTE}:text='${legenda}':fontcolor=white@0.92:fontsize=25:shadowcolor=black@0.55:shadowx=1:shadowy=1:x=(w-text_w)/2:y=h-150[vt]`;
+  // baseline do texto acima do limite inferior seguro (h - SAFE_BOTTOM)
+  of += `${cur}drawtext=fontfile=${FONTE}:text='${legenda}':fontcolor=white@0.92:fontsize=26:shadowcolor=black@0.6:shadowx=1:shadowy=1:x=(w-text_w)/2:y=h-${SAFE_BOTTOM + 46}[vt]`;
   let mapa = ['-map', '[vt]'];
   if (musicPath) {
     const mi = quadros.length + (temLogo ? 2 : 1);

@@ -240,6 +240,7 @@ async function main() {
       subtitleStyle: audio.legenda && audio.legenda !== 'nenhuma' ? audio.legenda : 'caixa',
       musicPath,
       ambiente: true,
+      marginV: 480, // acima dos 450px de UI do Reels (zona segura)
     });
   } else if (musicPath) {
     // só trilha (sem narração): mix simples ambiente + música com fade

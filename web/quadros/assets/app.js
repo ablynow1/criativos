@@ -631,9 +631,14 @@ function viewNovoErmos(fmtChips, bindFmt) {
     <div class="field"><label>Duração do vídeo</label><div class="chips">${durChipsEr}</div></div>
     <div class="field"><label>Legenda fixa (embaixo)</label>
       <input type="text" id="er-leg" value="${esc(m.legendaErmos)}"></div>
-    <div class="field"><label>Logo no topo (opcional)</label>
-      <div class="btnrow"><button class="btn sm ghost" id="er-logo">${m.logoUrl ? '✓ logo carregado · trocar' : 'subir logo (png)'}</button>
-      ${m.logoUrl ? '<button class="btn sm danger" id="er-logo-x">✕</button>' : ''}</div></div>
+    <div class="field"><label>Logo no topo</label>
+      <div class="chips">
+        <button class="chip ${!m.logoUrl && !m.semLogo ? 'on' : ''}" data-logo="padrao">Atelier by Malta (padrão)</button>
+        <button class="chip ${m.logoUrl ? 'on' : ''}" data-logo="upload">${m.logoUrl ? '✓ minha logo' : 'subir a minha'}</button>
+        <button class="chip ${m.semLogo ? 'on' : ''}" data-logo="nenhuma">sem logo</button>
+      </div>
+      ${m.logoUrl ? `<div class="logo-prev"><img src="${esc(m.logoUrl)}" alt=""></div>` : ''}
+    </div>
     <div class="field"><label>Trilha musical</label><div class="chips">${triChips}</div></div>
     <div class="row"><span class="rl">Exportar também 4:5 (feed do Meta)</span><button class="tg ${m.fmt45 ? 'on' : ''}" id="mk-45"></button></div>
     <div class="spacer"></div>
@@ -658,18 +663,20 @@ function viewNovoErmos(fmtChips, bindFmt) {
   $('#er-leg').oninput = (e) => { m.legendaErmos = e.target.value; };
   $('#drop').onclick = pickArtes;
   $('#da-loja').onclick = () => { S.screen = 'loja'; render(); if (!S.loja.produtos.length) carregaLoja(); };
-  $('#er-logo').onclick = () => {
+  app.querySelectorAll('[data-logo]').forEach((b) => b.onclick = () => {
+    const op = b.dataset.logo;
+    if (op === 'padrao') { m.logoUrl = null; m.semLogo = false; return render(); }
+    if (op === 'nenhuma') { m.logoUrl = null; m.semLogo = true; return render(); }
     const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/png';
+    inp.type = 'file'; inp.accept = 'image/png,image/svg+xml';
     inp.onchange = async () => {
       const f = inp.files[0]; if (!f) return;
       const fd = new FormData(); fd.append('file', f);
-      try { const r = await api('upload_image', { form: fd }); m.logoUrl = r.url; render(); toast('logo ok'); }
+      try { const r = await api('upload_image', { form: fd }); m.logoUrl = r.url; m.semLogo = false; render(); toast('logo carregada ✓'); }
       catch (e) { toast(e.message, true); }
     };
     inp.click();
-  };
-  const lx = $('#er-logo-x'); if (lx) lx.onclick = () => { m.logoUrl = null; render(); };
+  });
   const t45 = $('#mk-45'); if (t45) t45.onclick = () => { m.fmt45 = !m.fmt45; render(); };
   $('#er-go').onclick = async () => {
     try {
@@ -677,7 +684,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
         fundoIds: m.fundoIds, moldura: m.moldura2d,
         arteUrls: m.artes.map((a) => a.url),
         ritmo: m.ritmo, duracao: m.duracaoErmos, legenda: m.legendaErmos.trim(),
-        logoUrl: m.logoUrl, musica: m.musica,
+        logoUrl: m.logoUrl, semLogo: !!m.semLogo, musica: m.musica,
         formatos: m.fmt45 ? ['9:16', '4:5'] : ['9:16'], nome: '',
       } });
       m.artes = [];

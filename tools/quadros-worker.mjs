@@ -254,7 +254,7 @@ async function processErmos(job) {
     await download(snap.logoUrl, logoPath);
   }
   const cfg = {
-    fundoDirs, artes, logoPath,
+    fundoDirs, artes, logoPath, semLogo: !!snap.semLogo,
     moldura: snap.moldura || 'preto',
     ritmo: snap.ritmo || 0.3,
     duracao: snap.duracao || 8,

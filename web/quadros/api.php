@@ -183,6 +183,7 @@ if ($action === 'queue_ermos') {
             'duracao' => max(5, min(20, (int)($b['duracao'] ?? 8))),
             'legenda' => trim($b['legenda'] ?? ''),
             'logoUrl' => $b['logoUrl'] ?? null,
+            'semLogo' => !empty($b['semLogo']),
             'musica' => $b['musica'] ?? 'nenhuma',
             'formatos' => (!empty($b['formatos']) && is_array($b['formatos'])) ? $b['formatos'] : ['9:16'],
         ],
