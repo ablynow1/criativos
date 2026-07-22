@@ -223,6 +223,8 @@ function sincronizaUrl(rota) {
 
 window.addEventListener('popstate', () => {
   if (ignoraPop) return;
+  // a lupa empilhou uma entrada só pra ela: o voltar fecha a lupa, não a tela
+  if (lupa) return fechaLupa();
   Object.assign(S, estadoDeRota(location.hash));
   render();
 });
@@ -786,6 +788,71 @@ function viewNovoCenario() {
 }
 
 // ---------- APROVAR CENÁRIO ----------
+/* ================================================================ LUPA ====
+   Ver a imagem em tamanho real. Fecha no Esc, no toque fora, no botão e no
+   VOLTAR do celular — pra isso empilha uma entrada de histórico própria, senão
+   o gesto de voltar sairia da tela do palco em vez de fechar a lupa.        */
+let lupa = null;
+
+function abreLupa(urls, i) {
+  fechaLupa(true);
+  const el = document.createElement('div');
+  el.className = 'lupa';
+  el.innerHTML = `
+    <button class="lupa-x" aria-label="fechar">✕</button>
+    <button class="lupa-nav prev" aria-label="anterior">‹</button>
+    <img alt="">
+    <button class="lupa-nav next" aria-label="próxima">›</button>
+    <div class="lupa-n"></div>`;
+  document.body.appendChild(el);
+  document.body.style.overflow = 'hidden';
+  lupa = { el, urls, i };
+
+  const pinta = () => {
+    el.querySelector('img').src = lupa.urls[lupa.i];
+    el.querySelector('.lupa-n').textContent = `${lupa.i + 1} / ${lupa.urls.length}`;
+    el.querySelector('.prev').hidden = lupa.urls.length < 2;
+    el.querySelector('.next').hidden = lupa.urls.length < 2;
+  };
+  const anda = (d) => { lupa.i = (lupa.i + d + lupa.urls.length) % lupa.urls.length; pinta(); };
+  pinta();
+
+  el.querySelector('.lupa-x').onclick = () => history.back();
+  el.querySelector('.prev').onclick = (e) => { e.stopPropagation(); anda(-1); };
+  el.querySelector('.next').onclick = (e) => { e.stopPropagation(); anda(1); };
+  el.onclick = (e) => { if (e.target === el) history.back(); };
+
+  lupa.tecla = (e) => {
+    if (e.key === 'Escape') history.back();
+    else if (e.key === 'ArrowLeft') anda(-1);
+    else if (e.key === 'ArrowRight') anda(1);
+  };
+  addEventListener('keydown', lupa.tecla);
+
+  // arrastar pro lado troca de cena
+  let x0 = null;
+  el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 45) anda(dx < 0 ? 1 : -1);
+    x0 = null;
+  }, { passive: true });
+
+  ignoraPop = true;
+  history.pushState({ lupa: true }, '', location.hash);
+  ignoraPop = false;
+}
+
+function fechaLupa(silencioso) {
+  if (!lupa) return;
+  removeEventListener('keydown', lupa.tecla);
+  lupa.el.remove();
+  document.body.style.overflow = '';
+  lupa = null;
+  if (!silencioso) return;
+}
+
 function viewAprovar(id) {
   const c = S.cenarios.find((x) => x.id === id);
   if (!c) { S.screen = null; return render(); }
@@ -793,10 +860,12 @@ function viewAprovar(id) {
   // A 1ª fica de fora — é ela que define a pessoa, as outras nascem dela.
   const refazendo = S.jobs.some((j) => j.tipo === 'keyframe'
     && j.snapshot?.cenarioId === id && ['queued', 'claimed', 'running'].includes(j.status));
-  const imgs = (c.thumbs || []).map((u, i) => {
+  const cenas = c.thumbs || [];
+  const imgs = cenas.map((u, i) => {
     const kf = `K${i + 1}`;
     return `<figure class="ap-cena">
-      <img src="${esc(u)}" alt="">
+      <img src="${esc(u)}" alt="cena ${i + 1} de ${cenas.length}" data-lb="${i}" loading="lazy">
+      <span class="ap-num">${i + 1}</span>
       ${i === 0
         ? '<figcaption class="ap-tag">1ª · define a pessoa</figcaption>'
         : `<button class="ap-refaz" data-kf="${kf}" ${refazendo ? 'disabled' : ''}>↻ refazer esta cena</button>`}
@@ -804,7 +873,8 @@ function viewAprovar(id) {
   }).join('');
   shell(`
     <h2 class="view-t">${esc(c.nome)}</h2>
-    <p class="view-sub">Confira: a mesma pessoa nas 6 cenas? verde limpo? moldura certa?</p>
+    <p class="view-sub">Confira: a mesma pessoa nas ${cenas.length} cenas? verde limpo? moldura certa?
+      <b>Toque numa cena pra ver grande.</b></p>
     ${refazendo ? '<div class="hint" style="margin-bottom:10px">refazendo uma cena… acompanhe na Fila</div>' : ''}
     <div class="approve-grid">${imgs}</div>
     <div class="hint" style="margin:8px 0 14px">Se a <b>1ª</b> cena estiver errada, refaça o cenário inteiro — é dela que sai a identidade das outras.</div>
@@ -813,6 +883,8 @@ function viewAprovar(id) {
     <button class="btn ghost" id="ap-back">Voltar</button>
   `);
   $('#ap-back').onclick = () => { S.screen = null; render(); };
+  // julgar 6 keyframes a 150px não dá — este é o ÚNICO portão humano do produto
+  app.querySelectorAll('[data-lb]').forEach((im) => im.onclick = () => abreLupa(cenas, +im.dataset.lb));
   app.querySelectorAll('[data-kf]').forEach((b) => b.onclick = async () => {
     b.disabled = true; b.textContent = 'enfileirando…';
     try {

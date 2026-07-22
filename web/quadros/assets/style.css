@@ -643,6 +643,67 @@ nav.tabs button.on .badge { background: var(--gold-ink); color: var(--gold); bor
   border-radius: var(--r-sm);
 }
 
+.ap-num {
+  position: absolute; top: var(--s2); left: var(--s2);
+  min-width: 22px; height: 22px; padding: 0 6px;
+  display: grid; place-items: center;
+  background: rgba(11,11,13,.82); color: var(--ink-2);
+  border: 1px solid var(--line-2); border-radius: var(--r-full);
+  font-size: 10px; font-weight: 800;
+  backdrop-filter: blur(3px);
+}
+.ap-cena { position: relative; }
+
+/* ---- lupa (imagem em tamanho real) ---- */
+.lupa {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center;
+  padding: var(--s5);
+  padding-top: max(var(--s5), env(safe-area-inset-top));
+  padding-bottom: max(var(--s5), env(safe-area-inset-bottom));
+  background: rgba(6,5,4,.94);
+  backdrop-filter: blur(10px);
+  animation: lupaIn .18s cubic-bezier(.4,0,.2,1);
+}
+@keyframes lupaIn { from { opacity: 0; } to { opacity: 1; } }
+.lupa img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-3);
+}
+.lupa-x {
+  position: absolute; top: max(var(--s4), env(safe-area-inset-top)); right: var(--s4);
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line-2); border-radius: 50%;
+  font-size: var(--t-md);
+  transition: background var(--fast);
+}
+.lupa-x:hover { background: var(--surface-3); }
+.lupa-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 46px; height: 76px;
+  display: grid; place-items: center;
+  background: rgba(25,20,16,.8); color: var(--ink);
+  border: 1px solid var(--line-2); border-radius: var(--r-md);
+  font-size: var(--t-2xl); line-height: 1;
+  transition: background var(--fast);
+}
+.lupa-nav:hover { background: var(--surface-3); }
+.lupa-nav.prev { left: var(--s2); }
+.lupa-nav.next { right: var(--s2); }
+.lupa-n {
+  position: absolute; bottom: max(var(--s5), env(safe-area-inset-bottom)); left: 50%;
+  transform: translateX(-50%);
+  padding: var(--s2) var(--s4);
+  background: var(--surface-2); color: var(--ink-2);
+  border: 1px solid var(--line-2); border-radius: var(--r-full);
+  font-size: var(--t-sm); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+@media (min-width: 768px) { .lupa-nav.prev { left: var(--s6); } .lupa-nav.next { right: var(--s6); } }
+
 /* ---- loja ---- */
 .loja-item {
   position: relative;
