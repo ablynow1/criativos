@@ -1080,6 +1080,7 @@ function viewFila() {
     const badge = j.tipo === 'mockup' ? '<span class="jt mock">mockup</span>'
       : j.tipo === 'ermos' ? '<span class="jt mock">ermos</span>'
       : j.tipo === 'fundo' ? '<span class="jt">lugar</span>'
+      : j.tipo === 'keyframe' ? '<span class="jt">1 cena</span>'
       : '<span class="jt">cenário</span>';
     // vídeo pronto: player embutido no próprio card (sem ir na Galeria)
     const temVideo = j.status === 'done' && j.video;

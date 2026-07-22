@@ -820,6 +820,19 @@ if ($action === 'worker_keyframe') {
     }
     unset($c);
     jwrite('cenarios', $cenarios);
+    // fecha o job aqui mesmo: uma chamada só, sem chance de a imagem subir e o
+    // job ficar preso em "subindo a cena" se a segunda chamada falhar
+    $job_id = $_POST['job_id'] ?? '';
+    if ($job_id !== '') {
+        $jobs = jread('jobs', []);
+        foreach ($jobs as &$j) {
+            if ($j['id'] !== $job_id) continue;
+            $j['status'] = 'done'; $j['pct'] = 100; $j['stage'] = 'pronto';
+            $j['updated_at'] = now();
+        }
+        unset($j);
+        jwrite('jobs', $jobs);
+    }
     out(['ok' => true, 'thumb' => $base]);
 }
 

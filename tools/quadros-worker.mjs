@@ -258,8 +258,7 @@ async function processKeyframe(job) {
   form.append('cenario_id', snap.cenarioId);
   form.append('kf', snap.kf);
   form.append('keyframe', new Blob([await readFile(outPath)]), `${snap.kf}.png`);
-  await call('worker_keyframe', { form });
-  await call('worker_done', { body: { job_id: job.id } });
+  await call('worker_keyframe', { form });   // esse endpoint já fecha o job
   log(`✅ cena ${snap.kf} de ${snap.cenarioId} refeita`);
 }
 
