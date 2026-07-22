@@ -8,6 +8,7 @@ const app = $('#app');
 const S = {
   auth: false, tab: 'cenarios', screen: null, catFiltro: null, // null = home (pastas)
   refazer: null, // painel "refazer com outra moldura/lugar" aberto num job
+  logAberto: null, // id do job com o log do pipeline expandido na Fila
   cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
   loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], orient: '', orientacoes: null, carregando: false, completo: true },
   yt: { busca: '', videos: [], sel: null, inicio: 0, carregando: false },
@@ -1230,21 +1231,71 @@ function refazerHtml(j) {
   </div>`;
 }
 
+const ROTULO_TIPO = { mockup: 'mockup', ermos: 'ermos', fundo: 'lugar', keyframe: '1 cena', cenario: 'cenário' };
+
+function dur(seg) {
+  if (!isFinite(seg) || seg < 0) return '—';
+  const m = Math.floor(seg / 60);
+  const s = Math.round(seg % 60);
+  return m ? `${m}min${s ? ` ${s}s` : ''}` : `${s}s`;
+}
+
+// Quanto costuma levar um trabalho DESTE tipo? Sai da mediana do que já rodou
+// aqui mesmo — estimativa medida, não chute. Sem histórico, não promete nada.
+function tempoTipico(tipo) {
+  const feitos = S.jobs
+    .filter((j) => j.tipo === tipo && j.status === 'done' && j.created_at && j.updated_at)
+    .map((j) => j.updated_at - j.created_at)
+    .filter((d) => d > 2 && d < 3600)
+    .sort((a, b) => a - b);
+  return feitos.length >= 3 ? feitos[Math.floor(feitos.length / 2)] : null;
+}
+
 function viewFila() {
+  const agora = Math.floor(Date.now() / 1000);
   const jobs = S.jobs;
+  const ativos = jobs.filter((j) => ['queued', 'claimed', 'running'].includes(j.status));
+  const rodando = ativos.filter((j) => j.status !== 'queued');
+  // O worker parece parado? Só acusamos se HÁ trabalho esperando e nada se
+  // mexeu há mais de 2 minutos — senão fila vazia pareceria worker morto.
+  const ultimoToque = Math.max(0, ...jobs.map((j) => j.updated_at || 0));
+  const travado = ativos.length > 0 && agora - ultimoToque > 120;
+
+  const naFila = ativos.filter((j) => j.status === 'queued');
   const rows = jobs.map((j) => {
     const running = ['claimed', 'running'].includes(j.status);
-    const badge = j.tipo === 'mockup' ? '<span class="jt mock">mockup</span>'
-      : j.tipo === 'ermos' ? '<span class="jt mock">ermos</span>'
-      : j.tipo === 'fundo' ? '<span class="jt">lugar</span>'
-      : j.tipo === 'keyframe' ? '<span class="jt">1 cena</span>'
-      : '<span class="jt">cenário</span>';
-    // vídeo pronto: player embutido no próprio card (sem ir na Galeria)
+    const badge = `<span class="jt ${['mockup', 'ermos'].includes(j.tipo) ? 'mock' : ''}">${ROTULO_TIPO[j.tipo] || j.tipo}</span>`;
     const temVideo = j.status === 'done' && j.video;
+    const decorrido = j.created_at ? agora - j.created_at : null;
+    const tipico = tempoTipico(j.tipo);
+
+    // linha de tempo: honesta sobre o que sabe e o que não sabe
+    let tempo = '';
+    if (running) {
+      const falta = tipico ? tipico - decorrido : null;
+      tempo = `<b>${dur(decorrido)}</b> rodando`
+        + (tipico ? ` · ${falta > 15 ? `~${dur(falta)} restando` : 'terminando'}` : '');
+    } else if (j.status === 'queued') {
+      const pos = naFila.indexOf(j) + 1;
+      tempo = `${pos}º da fila${rodando.length ? ' · começa quando o atual terminar' : ''}`;
+    } else if (j.status === 'done' && decorrido !== null) {
+      tempo = `levou ${dur(j.updated_at - j.created_at)}`;
+    }
+
+    // o log ao vivo já chega em todo poll — antes era jogado fora
+    const linhas = Array.isArray(j.log) ? j.log : [];
+    const ultima = linhas[linhas.length - 1];
+    const aberto = S.logAberto === j.id;
+
     return `<div class="job">
       <div class="jh">${badge}<span class="jn">${esc(j.nome)}</span></div>
-      <div class="stage">${esc(j.stage || j.status)}${j.status === 'done' ? ' ✓' : ''}</div>
+      <div class="stage">${esc(j.stage || j.status)}${j.status === 'done' ? ' ✓' : ''}${tempo ? ` <span class="jtime">· ${tempo}</span>` : ''}</div>
       ${j.status !== 'done' && j.status !== 'error' ? `<div class="bar ${running ? 'run' : ''}"><i style="width:${j.pct || 0}%"></i></div>` : ''}
+      ${ultima && j.status !== 'done' ? `<button class="jlog ${aberto ? 'on' : ''}" data-log="${esc(j.id)}">
+        <span class="jlog-l">${esc(aberto ? 'esconder o detalhe' : ultima.slice(0, 96))}</span>
+        <span class="jlog-c">${aberto ? '▲' : `▾ ${linhas.length}`}</span>
+      </button>` : ''}
+      ${aberto ? `<pre class="jlog-full">${esc(linhas.slice(-14).join('\n'))}</pre>` : ''}
       ${j.error ? `<div class="err">${esc(j.error)}</div>` : ''}
       ${temVideo ? `<div class="jvid">
         <video src="${esc(j.video)}" controls playsinline preload="metadata"></video>
@@ -1263,8 +1314,20 @@ function viewFila() {
       </div>
     </div>`;
   }).join('');
-  shell(`<h2 class="view-t">Fila</h2><p class="view-sub">O worker no seu Mac processa um por vez.</p>
-    ${jobs.length ? rows : '<div class="empty">Fila vazia.</div>'}`);
+
+  const resumo = ativos.length
+    ? `<b>${ativos.length}</b> na fila${rodando.length ? ` · <b>${esc(rodando[0].stage || 'rodando')}</b>` : ''}`
+    : 'Nada rodando. O worker no seu Mac processa um por vez.';
+
+  shell(`<h2 class="view-t">Fila</h2>
+    <p class="view-sub">${resumo}</p>
+    ${travado ? `<div class="aviso">O worker não dá sinal há <b>${dur(agora - ultimoToque)}</b> e tem trabalho esperando.
+      Confira se ele está rodando no Mac.</div>` : ''}
+    ${jobs.length ? rows : '<div class="empty">Fila vazia — nenhum trabalho ainda.</div>'}`);
+  app.querySelectorAll('[data-log]').forEach((b) => b.onclick = () => {
+    S.logAberto = S.logAberto === b.dataset.log ? null : b.dataset.log;
+    render();
+  });
   const act = async (op, id) => { try { await api('job_action', { body: { op, job_id: id } }); await refresh(); } catch (e) { toast(e.message, true); } };
   app.querySelectorAll('[data-retry]').forEach((b) => b.onclick = () => act('retry', b.dataset.retry));
   app.querySelectorAll('[data-cancel]').forEach((b) => b.onclick = () => act('cancel', b.dataset.cancel));

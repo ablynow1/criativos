@@ -826,13 +826,59 @@ nav.tabs button.on .badge { background: var(--gold-ink); color: var(--gold); bor
   color: var(--danger); font-size: var(--t-sm);
   word-break: break-word;
 }
+.jtime { color: var(--ink-3); }
+.jtime b { color: var(--gold); font-weight: 700; }
+
+/* log do pipeline — chega em todo poll; antes era jogado fora */
+.jlog {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; min-height: 38px;
+  margin-top: var(--s2); padding: var(--s2) var(--s3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  text-align: left;
+  transition: background var(--fast), border-color var(--fast);
+}
+.jlog:hover { background: var(--surface-3); border-color: var(--line-2); }
+.jlog.on { border-color: var(--line-2); }
+.jlog-l {
+  flex: 1; min-width: 0;
+  color: var(--ink-3); font-family: var(--mono); font-size: var(--t-xs);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jlog-c { color: var(--ink-4); font-size: var(--t-xs); font-weight: 700; flex: none; }
+.jlog-full {
+  margin-top: var(--s1); padding: var(--s3);
+  max-height: 220px; overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink-3);
+  font-family: var(--mono); font-size: var(--t-xs); line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* aviso de worker sem sinal */
+.aviso {
+  margin-bottom: var(--s4); padding: var(--s3) var(--s4);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-radius: var(--r-md);
+  color: var(--warn); font-size: var(--t-sm); line-height: 1.5;
+}
+.aviso b { color: var(--ink); }
+
 .jvid { margin-top: var(--s3); }
+/* limita pela ALTURA: um 9:16 de 260px de largura come 460px de tela, e com
+   53 trabalhos a lista virava 24 mil pixels de rolagem */
 .jvid video {
-  width: 100%; max-width: 260px;
+  width: auto; max-width: 100%; max-height: 300px;
   border-radius: var(--r-md);
   background: #000;
   border: 1px solid var(--line);
 }
+@media (min-width: 1100px) { .jvid video { max-height: 380px; } }
 .jactions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); }
 
 .gdl { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
