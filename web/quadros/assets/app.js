@@ -674,16 +674,38 @@ function viewNovoCenario() {
 function viewAprovar(id) {
   const c = S.cenarios.find((x) => x.id === id);
   if (!c) { S.screen = null; return render(); }
-  const imgs = (c.thumbs || []).map((u) => `<img src="${esc(u)}" alt="">`).join('');
+  // cada cena tem seu "refazer": errar uma não pode custar as outras cinco.
+  // A 1ª fica de fora — é ela que define a pessoa, as outras nascem dela.
+  const refazendo = S.jobs.some((j) => j.tipo === 'keyframe'
+    && j.snapshot?.cenarioId === id && ['queued', 'claimed', 'running'].includes(j.status));
+  const imgs = (c.thumbs || []).map((u, i) => {
+    const kf = `K${i + 1}`;
+    return `<figure class="ap-cena">
+      <img src="${esc(u)}" alt="">
+      ${i === 0
+        ? '<figcaption class="ap-tag">1ª · define a pessoa</figcaption>'
+        : `<button class="ap-refaz" data-kf="${kf}" ${refazendo ? 'disabled' : ''}>↻ refazer esta cena</button>`}
+    </figure>`;
+  }).join('');
   shell(`
     <h2 class="view-t">${esc(c.nome)}</h2>
     <p class="view-sub">Confira: a mesma pessoa nas 6 cenas? verde limpo? moldura certa?</p>
+    ${refazendo ? '<div class="hint" style="margin-bottom:10px">refazendo uma cena… acompanhe na Fila</div>' : ''}
     <div class="approve-grid">${imgs}</div>
+    <div class="hint" style="margin:8px 0 14px">Se a <b>1ª</b> cena estiver errada, refaça o cenário inteiro — é dela que sai a identidade das outras.</div>
     <button class="btn" id="ap-ok">Aprovar palco</button>
     <div class="spacer"></div>
     <button class="btn ghost" id="ap-back">Voltar</button>
   `);
   $('#ap-back').onclick = () => { S.screen = null; render(); };
+  app.querySelectorAll('[data-kf]').forEach((b) => b.onclick = async () => {
+    b.disabled = true; b.textContent = 'enfileirando…';
+    try {
+      await api('queue_keyframe', { body: { id, kf: b.dataset.kf } });
+      await refresh();
+      toast('refazendo a cena — leva ~1 min');
+    } catch (e) { toast(e.message, true); render(); }
+  });
   $('#ap-ok').onclick = async () => {
     try { await api('approve_cenario', { body: { id } }); await refresh(); S.screen = null; S.tab = 'cenarios'; toast('cenário aprovado ✓'); render(); }
     catch (e) { toast(e.message, true); }

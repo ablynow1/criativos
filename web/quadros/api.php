@@ -763,6 +763,66 @@ function register_cenario(): void {
     jwrite('cenarios', $cenarios);
 }
 
+// REFAZER 1 CENA: quando uma das 6 sai errada, regerar o cenário inteiro é
+// caro e ainda arrisca estragar as 5 boas. K1 fica de fora — é a raiz da
+// identidade, refazer ele sozinho descasaria as outras cinco.
+if ($action === 'queue_keyframe') {
+    require_login(); require_csrf();
+    $b = body();
+    $cid = preg_replace('/[^a-z0-9\-_]/', '', $b['id'] ?? '');
+    $kf = strtoupper(trim($b['kf'] ?? ''));
+    if (!in_array($kf, ['K2', 'K3', 'K4', 'K5', 'K6'], true)) {
+        fail('só dá pra refazer da 2ª à 6ª cena — a 1ª é a que define a pessoa');
+    }
+    $cen = null;
+    foreach (jread('cenarios', []) as $c) if ($c['id'] === $cid) { $cen = $c; break; }
+    if (!$cen) fail('cenário não encontrado');
+    $k1 = null;
+    foreach ($cen['thumbs'] ?? [] as $t) if (str_contains($t, '/K1.')) $k1 = $t;
+    if (!$k1) fail('esse cenário não tem a 1ª cena guardada — refaça o cenário inteiro');
+
+    $jobs = jread('jobs', []);
+    $job = [
+        'id' => rid('job_'), 'tipo' => 'keyframe',
+        'nome' => ($cen['nome'] ?? 'Cenário') . " · refazendo a cena $kf",
+        'snapshot' => [
+            'tipo' => 'keyframe', 'cenarioId' => $cid, 'kf' => $kf,
+            'k1Url' => $k1, 'molduraUrl' => $cen['molduraFotoUrl'] ?? null,
+            'avatar' => $cen['avatar'] ?? '', 'ambiente' => $cen['ambiente'] ?? '',
+            'moldura' => $cen['moldura'] ?? '',
+        ],
+        'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],
+        'video' => null, 'error' => null, 'created_at' => now(), 'updated_at' => now(),
+    ];
+    array_unshift($jobs, $job);
+    jwrite('jobs', $jobs);
+    out(['ok' => true, 'job' => $job]);
+}
+
+// troca UMA imagem do cenário no lugar. O ?v= no fim é o que faz o navegador
+// largar a versão antiga — o caminho do arquivo continua o mesmo.
+if ($action === 'worker_keyframe') {
+    require_worker();
+    $cid = preg_replace('/[^a-z0-9\-_]/', '', $_POST['cenario_id'] ?? '');
+    $kf = preg_replace('/[^A-Z0-9]/', '', strtoupper($_POST['kf'] ?? ''));
+    if ($cid === '' || $kf === '' || !isset($_FILES['keyframe'])) fail('cenario_id/kf/keyframe ausentes');
+    $dir = CENMEDIA . '/' . $cid;
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    if (!move_uploaded_file($_FILES['keyframe']['tmp_name'], "$dir/$kf.png")) fail('não consegui salvar a cena');
+    $base = "media/cenarios/$cid/$kf.png";
+    $cenarios = jread('cenarios', []);
+    foreach ($cenarios as &$c) {
+        if ($c['id'] !== $cid) continue;
+        $c['thumbs'] = array_map(
+            fn($t) => str_contains(explode('?', $t)[0], "/$kf.") ? $base . '?v=' . time() : $t,
+            $c['thumbs'] ?? []);
+        $c['updated_at'] = now();
+    }
+    unset($c);
+    jwrite('cenarios', $cenarios);
+    out(['ok' => true, 'thumb' => $base]);
+}
+
 if ($action === 'worker_add_cenario') {
     require_worker();
     register_cenario();

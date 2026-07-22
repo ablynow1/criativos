@@ -231,6 +231,38 @@ async function processFundo(job) {
   log(`✅ fundo ${snap.fundoId} pronto (vídeo no Mac, reusável pra sempre)`);
 }
 
+// REFAZER 1 CENA do cenário: baixa o K1 (master da identidade) do painel,
+// regera só aquele keyframe por img2img e devolve a imagem no lugar.
+async function processKeyframe(job) {
+  const snap = job.snapshot || {};
+  const dir = path.join(ROOT, 'tmp', `kf-${job.id}`);
+  await mkdir(dir, { recursive: true });
+  const k1Path = path.join(dir, 'K1.png');
+  await progress(job.id, 8, 'baixando a 1ª cena (referência da pessoa)');
+  await download(snap.k1Url, k1Path);
+  let molduraPath = null;
+  if (snap.molduraUrl) {
+    molduraPath = path.join(dir, 'moldura.png');
+    await download(snap.molduraUrl, molduraPath).catch(() => { molduraPath = null; });
+  }
+  const cfgPath = path.join(dir, 'kf.json');
+  await writeFile(cfgPath, JSON.stringify({ ...snap, k1Path, molduraPath }, null, 2));
+  const outPath = path.join(dir, `${snap.kf}.png`);
+  await progress(job.id, 30, `refazendo a cena ${snap.kf}`);
+  await runCli(['src/refazKeyframe.js', '--config', cfgPath, '--out', outPath], (line) => {
+    if (/tentativa/.test(line)) progress(job.id, undefined, undefined, line);
+  });
+  await progress(job.id, 85, 'subindo a cena');
+  const form = new FormData();
+  form.append('job_id', job.id);
+  form.append('cenario_id', snap.cenarioId);
+  form.append('kf', snap.kf);
+  form.append('keyframe', new Blob([await readFile(outPath)]), `${snap.kf}.png`);
+  await call('worker_keyframe', { form });
+  await call('worker_done', { body: { job_id: job.id } });
+  log(`✅ cena ${snap.kf} de ${snap.cenarioId} refeita`);
+}
+
 // MOCKUP ERMOS: quadro flutuante trocando artes sobre os fundos (sem Veo).
 async function processErmos(job) {
   const snap = job.snapshot || {};
@@ -337,6 +369,7 @@ async function loop() {
           if (job.snapshot?.tipo === 'cenario') await processCenario(job);
           else if (job.snapshot?.tipo === 'fundo') await processFundo(job);
           else if (job.snapshot?.tipo === 'ermos') await processErmos(job);
+          else if (job.snapshot?.tipo === 'keyframe') await processKeyframe(job);
           else await processMockup(job);
         } catch (err) {
           await flushProgress();

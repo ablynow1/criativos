@@ -40,8 +40,16 @@ The product: a VERY LARGE vertical poster frame, about 1 meter tall, with ${mold
 CRITICAL REQUIREMENT: the entire artwork area inside the moulding is a SOLID, FLAT, UNIFORM BRIGHT CHROMA-KEY GREEN (#00FF00) — perfectly even pure green from edge to edge, like a professional green screen. NO reflections, NO gradient, NO texture, NO glare and NO shadows on the green area. Only the ${moldura} around it.`;
 }
 
+// NUNCA escrever "she/her/the woman" aqui. O avatar é escolhido pelo usuário —
+// pronome fixo no prompt briga com a imagem de referência e o modelo troca a
+// pessoa (foi assim que um cenário de homem virou mulher no K4, o shot mais
+// centrado na pessoa). Texto neutro + "same gender" explícito trava a identidade.
+const MESMA_PESSOA =
+  'the SAME person as in the reference image (same face, same gender, same age, '
+  + 'same hair, same outfit, same hands) — never replace them with a different person';
+
 function sameBlock({ moldura }) {
-  return `Use the reference image for the woman's identity (same face, same hair, same outfit, same hands), the same setting and the same large frame with ${moldura} and the flat chroma-key green (#00FF00) artwork area — keep the green perfectly solid, flat and uniform, no reflections.`;
+  return `Use the reference image for the identity of ${MESMA_PESSOA}, the same setting and the same large frame with ${moldura} and the flat chroma-key green (#00FF00) artwork area — keep the green perfectly solid, flat and uniform, no reflections.`;
 }
 
 // Os 6 shots FIXOS. Cada um recebe {avatar, ambiente, moldura} e devolve o
@@ -59,29 +67,29 @@ export function buildKeyframePrompts({ avatar, ambiente, moldura, molduraRef = f
 ${styleBlock({ avatar, ambiente, moldura })}`
     : styleBlock({ avatar, ambiente, moldura });
   const SAME = molduraRef
-    ? `First reference image: the woman's identity (same face, same hair, same outfit, same hands) and the same setting. LAST reference image: the EXACT picture-frame moulding — keep reproducing it faithfully on the large frame (same profile, material, finish, color and ornament). The frame keeps its flat chroma-key green (#00FF00) artwork area — perfectly solid, flat and uniform, no reflections.`
+    ? `First reference image: the identity of ${MESMA_PESSOA} and the same setting. LAST reference image: the EXACT picture-frame moulding — keep reproducing it faithfully on the large frame (same profile, material, finish, color and ornament). The frame keeps its flat chroma-key green (#00FF00) artwork area — perfectly solid, flat and uniform, no reflections.`
     : sameBlock({ moldura });
   return {
     K1: {
       master: true,
       prompt: `${STYLE}
-Shot: full-body wide shot. She stands in the middle of the store holding the large frame half-turned (about 45 degrees from camera), as if she is just turning it around to present it. The green surface is partially visible in perspective. She looks at the frame with a soft smile.`,
+Shot: full-body wide shot. The person stands in the middle of the place holding the large frame half-turned (about 45 degrees from camera), as if just turning it around to present it. The green surface is partially visible in perspective. They look at the frame with a soft smile.`,
     },
     K2: {
       prompt: `${SAME}
-New shot: medium frontal shot. The large green-screen frame now faces the camera straight on, filling most of the lower 2/3 of the image. Her head and shoulders appear above the top edge of the frame, smiling warmly at the camera, hands gripping the sides of the frame. Background softly blurred.`,
+New shot: medium frontal shot. The large green-screen frame now faces the camera straight on, filling most of the lower 2/3 of the image. Their head and shoulders appear above the top edge of the frame, smiling warmly at the camera, hands gripping the sides of the frame. Background softly blurred.`,
     },
     K3: {
       prompt: `${SAME}
-New shot: close-up on the frame itself. The flat green surface and the ${moldura} fill almost the whole image, slightly angled in gentle perspective. One of her hands holds the left edge. Warm lights in the blurry background.`,
+New shot: close-up on the frame itself. The flat green surface and the ${moldura} fill almost the whole image, slightly angled in gentle perspective. One of their hands holds the left edge. Warm lights in the blurry background.`,
     },
     K4: {
       prompt: `${SAME}
-New shot: close frontal shot. She stands BEHIND the large frame: only her head is visible above the top edge, chin slightly down, looking at the camera with a soft smile, both hands resting flat on the top edge of the moulding. Background softly blurred.`,
+New shot: close frontal shot. ${MESMA_PESSOA} stands BEHIND the large frame: only their head is visible above the top edge, chin slightly down, looking at the camera with a soft smile, both hands resting flat on the top edge of the moulding. Background softly blurred.`,
     },
     K5: {
       prompt: `${SAME}
-New shot: wide shot of a different corner of the same place. The large green-screen frame now HANGS on a clean white gallery wall with a small black picture light mounted above it. The woman stands to the side, seen from behind in three-quarter view, admiring the framed green surface on the wall. Ambience around.`,
+New shot: wide shot of a different corner of the same place. The large green-screen frame now HANGS on a clean white gallery wall with a small black picture light mounted above it. The person stands to the side, seen from behind in three-quarter view, admiring the framed green surface on the wall. Ambience around.`,
     },
     K6: {
       prompt: `${SAME}
@@ -113,23 +121,23 @@ export function buildVeoPrompts({ movimento = 'medio' } = {}) {
   return {
     V1A: {
       kf: 'K1A',
-      prompt: `She stands holding the large framed painting half-turned, presenting it: she tilts the frame just a few degrees toward the camera, makes tiny natural grip adjustments, and looks between the painting and the camera with a warm proud smile. ${STATIC_ART} NO large rotation of the frame. Static camera with a very subtle handheld sway, no zoom. Quiet room tone, soft fabric and wood sounds.`,
+      prompt: `The person in the image stands holding the large framed painting half-turned, presenting it: they tilt the frame just a few degrees toward the camera, make tiny natural grip adjustments, and look between the painting and the camera with a warm proud smile. ${STATIC_ART} NO large rotation of the frame. Static camera with a very subtle handheld sway, no zoom. Quiet room tone, soft fabric and wood sounds.`,
     },
     V2A: {
       kf: 'K2A',
-      prompt: `She holds the big framed painting facing the camera, makes tiny natural adjustments to her grip, tilts her head slightly and smiles warmly. ${STATIC_ART} ${m.push} Cozy ambience, faint room tone.`,
+      prompt: `The person in the image holds the big framed painting facing the camera, makes tiny natural adjustments to their grip, tilts their head slightly and smiles warmly. ${STATIC_ART} ${m.push} Cozy ambience, faint room tone.`,
     },
     V3A: {
       kf: 'K3A',
-      prompt: `Slow smooth diagonal camera glide along the large framed painting and the moulding, her hand steady on the edge. ${STATIC_ART} It changes only in natural perspective as the camera moves. Soft room tone.`,
+      prompt: `Slow smooth diagonal camera glide along the large framed painting and the moulding, their hand steady on the edge. ${STATIC_ART} It changes only in natural perspective as the camera moves. Soft room tone.`,
     },
     V4A: {
       kf: 'K4A',
-      prompt: `She rests her hands on the top edge of the frame, taps her fingers gently once, tilts her head and smiles at the camera. ${STATIC_ART} ${m.push} Shallow depth of field. Quiet ambience.`,
+      prompt: `The person in the image rests their hands on the top edge of the frame, taps their fingers gently once, tilts their head and smiles at the camera. ${STATIC_ART} ${m.push} Shallow depth of field. Quiet ambience.`,
     },
     V5A: {
       kf: 'K5A',
-      prompt: `The framed painting hangs on the white gallery wall under the black picture light. The woman stands to the side quietly admiring the framed artwork, gently nodding and turning her head as she appreciates it. ${STATIC_ART} Static camera. Quiet ambience.`,
+      prompt: `The framed painting hangs on the white gallery wall under the black picture light. The person in the image stands to the side quietly admiring the framed artwork, gently nodding and turning their head as they appreciate it. ${STATIC_ART} Static camera. Quiet ambience.`,
     },
     V6A: {
       kf: 'K6A',

@@ -74,6 +74,14 @@ crava 25.00s. Áudio: só ambiente, ou narração+trilha (opcional).
 
 ## 4. Regras invioláveis (as pegadinhas que custaram sangue)
 
+0. **Nenhum pronome de gênero nos templates de prompt.** Os shots nasceram
+   escritos no feminino (*"She stands BEHIND the frame: only her head…"*) e o
+   avatar é escolhido pelo usuário. Num cenário de homem, o pronome fixo brigou
+   com a imagem de referência e o modelo **trocou a pessoa** — justo no K4, o
+   shot mais centrado na pessoa. Regra: `the person` / `they` / `their`, mais a
+   cláusula `MESMA_PESSOA` (**same gender** explícito) apoiada na referência.
+   Vale igual pros prompts do Veo — lá a troca também acontece.
+
 1. **Arte = pintura estática no prompt do Veo.** Todo prompt de clipe TEM que
    conter, em substância:
    > *"The artwork inside the moulding is a STATIC physical painting — it stays
@@ -191,6 +199,17 @@ alpha porque em moldura **branca** não dá pra separar o pau do fundo por cor.
 e/ou os lugares; artes, ritmo, duração, trilha e legenda vêm do snapshot
 original. É o jeito barato de comparar variações do mesmo criativo — não passa
 por Veo, roda em ~1 min.
+
+## 5.7 Refazer UMA cena do cenário
+
+Cena errada (pessoa trocada, verde sujo, moldura fora) não pode custar as
+outras cinco: `queue_keyframe` → `src/refazKeyframe.js` regera só aquele
+keyframe por img2img do **K1**, do mesmo jeito que ele nasceu. O worker baixa
+o K1 do painel (a verdade mora no servidor, não no Mac) e devolve a imagem no
+lugar; o `?v=` no fim do caminho é o que faz o navegador largar a antiga.
+
+**K1 fica de fora de propósito** — é a raiz da identidade das outras cinco.
+Se ele estiver errado, o certo é refazer o cenário inteiro.
 
 ## 6. Como adicionar um cenário novo
 
