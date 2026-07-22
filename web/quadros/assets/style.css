@@ -241,6 +241,7 @@ nav.tabs button.on { background:var(--gold); color:#1a1206; }
 .yt-marca-l { font-size:13.5px; color:var(--muted); }
 .yt-marca-l b { color:var(--gold); }
 .yt-player input[type=range] { width:100%; accent-color:var(--gold); margin-bottom:11px; }
+.field input[type=range] { width:100%; accent-color:var(--gold); margin:10px 0 4px; }
 .yt-sel { display:flex; gap:11px; align-items:center; margin-top:10px; background:var(--surface);
   border:1px solid var(--line-2); border-radius:11px; padding:9px; }
 .yt-sel img { width:78px; aspect-ratio:16/9; object-fit:cover; border-radius:7px; flex:none; }

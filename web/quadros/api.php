@@ -185,6 +185,9 @@ if ($action === 'queue_ermos') {
             'ritmo' => max(0.15, min(2, (float)($b['ritmo'] ?? 0.3))),
             'duracao' => max(5, min(20, (int)($b['duracao'] ?? 8))),
             'legenda' => trim($b['legenda'] ?? ''),
+            // véu sobre o fundo pra legenda ficar legível
+            'pelicula' => in_array($b['pelicula'] ?? '', ['preta', 'branca'], true) ? $b['pelicula'] : 'nenhuma',
+            'peliculaOp' => max(0.0, min(0.9, (float)($b['peliculaOp'] ?? 0.3))),
             'logoUrl' => $b['logoUrl'] ?? null,
             'semLogo' => !empty($b['semLogo']),
             'musica' => $b['musica'] ?? 'nenhuma',
@@ -219,6 +222,16 @@ if ($action === 'requeue_ermos') {
         if (!in_array($moldura, ['preto', 'branco', 'marfim', 'arabesco'], true)) fail('moldura inválida');
         $snap['moldura'] = $moldura;
         $mudou[] = 'moldura ' . $moldura;
+    }
+    if (array_key_exists('pelicula', $b)) {
+        $pel = in_array($b['pelicula'], ['preta', 'branca'], true) ? $b['pelicula'] : 'nenhuma';
+        $op = max(0.0, min(0.9, (float)($b['peliculaOp'] ?? 0.3)));
+        if ($pel !== ($snap['pelicula'] ?? 'nenhuma')
+            || ($pel !== 'nenhuma' && abs($op - (float)($snap['peliculaOp'] ?? 0.3)) > 0.001)) {
+            $snap['pelicula'] = $pel;
+            $snap['peliculaOp'] = $op;
+            $mudou[] = $pel === 'nenhuma' ? 'sem película' : "película $pel " . round($op * 100) . '%';
+        }
     }
     if (!empty($b['fundoIds']) && is_array($b['fundoIds'])) {
         $novos = array_values(array_filter($b['fundoIds']));

@@ -254,6 +254,9 @@ async function processErmos(job) {
     await download(snap.logoUrl, logoPath);
   }
   const cfg = {
+    // o spread deixa passar campo novo do snapshot sem precisar reiniciar o
+    // worker (ele é processo longo — o fromErmos.js roda do zero a cada job)
+    ...snap,
     fundoDirs, artes, logoPath, semLogo: !!snap.semLogo,
     artistas: Array.isArray(snap.artistas) ? snap.artistas : [],
     moldura: snap.moldura || 'preto',

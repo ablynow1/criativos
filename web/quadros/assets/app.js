@@ -16,6 +16,7 @@ const S = {
     narracao: '', voz: 'pt-BR-Neural2-C', musica: 'nenhuma', legenda: 'caixa', fmt45: false, variar: false,
     // ermos
     fundoIds: [], moldura2d: 'preto', ritmo: 0.3, duracaoErmos: 8,
+    pelicula: 'nenhuma', peliculaOp: 0.3,
     ytId: null, ytTitulo: '', ytInicio: 0,
     legendaErmos: 'TODAS AS OBRAS JÁ DISPONÍVEIS EM NOSSO SITE', logoUrl: null },
   // form do cenário (molduraId = da biblioteca; duplicarDe = herda avatar/ambiente)
@@ -855,6 +856,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
     <div class="field"><label>Duração do vídeo</label><div class="chips">${durChipsEr}</div></div>
     <div class="field"><label>Legenda fixa (embaixo)</label>
       <input type="text" id="er-leg" value="${esc(m.legendaErmos)}"></div>
+    ${peliculaHtml(m, 'er')}
     <div class="field"><label>Logo no topo</label>
       <div class="chips">
         <button class="chip ${!m.logoUrl && !m.semLogo ? 'on' : ''}" data-logo="padrao">Atelier by Malta (padrão)</button>
@@ -901,6 +903,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
     if (i >= 0) { if (m.fundoIds.length > 1) m.fundoIds.splice(i, 1); } else m.fundoIds.push(id);
     render();
   });
+  bindPelicula(m, 'er');
   app.querySelectorAll('[data-m2d]').forEach((b) => b.onclick = () => { m.moldura2d = b.dataset.m2d; render(); });
   app.querySelectorAll('[data-rit]').forEach((b) => b.onclick = () => { m.ritmo = +b.dataset.rit; render(); });
   app.querySelectorAll('[data-durer]').forEach((b) => b.onclick = () => { m.duracaoErmos = +b.dataset.durer; render(); });
@@ -932,6 +935,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
         arteUrls: m.artes.map((a) => a.url),
         artistas: m.artes.map((a) => a.artista || ''),
         ritmo: m.ritmo, duracao: m.duracaoErmos, legenda: m.legendaErmos.trim(),
+        pelicula: m.pelicula || 'nenhuma', peliculaOp: m.peliculaOp ?? 0.3,
         logoUrl: m.logoUrl, semLogo: !!m.semLogo, musica: m.musica,
         ytId: m.ytId, ytInicio: m.ytInicio,
         formatos: m.fmt45 ? ['9:16', '4:5'] : ['9:16'], nome: '',
@@ -993,6 +997,38 @@ function pickArtes() {
 }
 
 // ---------- FILA ----------
+// PELÍCULA: véu sobre o fundo pra legenda ficar legível. Mesmo controle no
+// form novo e no refazer — é ajuste de tentativa e erro, tem que dar pra
+// mexer sem remontar o criativo.
+const PELICULAS = [['nenhuma', 'sem película'], ['preta', '⬛ preta'], ['branca', '⬜ branca']];
+function peliculaHtml(o, pre) {
+  const cor = o.pelicula || 'nenhuma';
+  const op = Math.round((o.peliculaOp ?? 0.3) * 100);
+  const chips = PELICULAS.map(([id, lb]) =>
+    `<button class="chip ${cor === id ? 'on' : ''}" data-${pre}pel="${id}">${lb}</button>`).join('');
+  return `<div class="field"><label>Película no fundo${cor !== 'nenhuma' ? ` · <b>${op}%</b>` : ''}</label>
+    <div class="chips">${chips}</div>
+    ${cor === 'nenhuma' ? '<div class="hint">um véu de cor só no cenário — a obra e a moldura não mudam</div>'
+      : `<input type="range" id="${pre}-pelop" min="5" max="80" step="5" value="${op}">
+         <div class="hint">quanto mais alto, mais o cenário some e mais a letra aparece</div>`}
+  </div>`;
+}
+// liga os chips + slider da película num objeto de estado qualquer
+function bindPelicula(o, pre, aoAjustar) {
+  app.querySelectorAll(`[data-${pre}pel]`).forEach((b) => b.onclick = () => {
+    o.pelicula = b.dataset[`${pre}pel`];
+    if (o.peliculaOp == null) o.peliculaOp = 0.3;
+    render();
+  });
+  const s = $(`#${pre}-pelop`);
+  if (s) s.oninput = (e) => {
+    o.peliculaOp = +e.target.value / 100;
+    const lb = s.parentElement.querySelector('label b');
+    if (lb) lb.textContent = `${e.target.value}%`;   // sem render: não perde o arrasto
+    if (aoAjustar) aoAjustar();
+  };
+}
+
 // REFAZER: o mesmo criativo com outra moldura e/ou outro lugar. Abre já
 // marcado no que ele usou — trocar uma coisa é um toque e confirmar.
 function refazerHtml(j) {
@@ -1003,11 +1039,13 @@ function refazerHtml(j) {
     chipMoldura(id, nome, R.moldura === id, 'data-rf-mol')).join('');
   const lugBtns = prontos.map((f) =>
     `<button class="chip ${R.fundoIds.includes(f.id) ? 'on' : ''}" data-rf-fun="${esc(f.id)}">${esc(f.nome)}</button>`).join('');
-  const mudou = R.moldura !== R.origMoldura || R.fundoIds.join() !== R.origFundos.join();
+  const mudou = R.moldura !== R.origMoldura || R.fundoIds.join() !== R.origFundos.join()
+    || R.pelicula !== R.origPel || (R.pelicula !== 'nenhuma' && R.peliculaOp !== R.origPelOp);
   return `<div class="refazer">
     <div class="field"><label>Moldura</label><div class="chips">${molBtns}</div></div>
     <div class="field"><label>Lugar${R.fundoIds.length > 1 ? ' (troca durante o vídeo)' : ''}</label>
       <div class="chips">${lugBtns || '<span class="hint">nenhum lugar ativado ainda</span>'}</div></div>
+    ${peliculaHtml(R, 'rf')}
     <div class="hint">As mesmas ${(j.snapshot?.arteUrls || []).length} artes, mesmo ritmo, mesma trilha.</div>
     <button class="btn sm" id="rf-go" ${mudou ? '' : 'disabled'}>${mudou ? 'Refazer com estas mudanças' : 'mude a moldura ou o lugar'}</button>
   </div>`;
@@ -1057,9 +1095,19 @@ function viewFila() {
     if (S.refazer && S.refazer.id === id) { S.refazer = null; return render(); }
     const j = S.jobs.find((x) => x.id === id);
     const s = j.snapshot || {};
+    const pel = s.pelicula || 'nenhuma';
+    const pelOp = s.peliculaOp ?? 0.3;
     S.refazer = { id, moldura: s.moldura, fundoIds: [...(s.fundoIds || [])],
-      origMoldura: s.moldura, origFundos: [...(s.fundoIds || [])] };
+      pelicula: pel, peliculaOp: pelOp,
+      origMoldura: s.moldura, origFundos: [...(s.fundoIds || [])],
+      origPel: pel, origPelOp: pelOp };
     render();
+  });
+  // arrastar a opacidade não re-renderiza (perderia o arrasto), então o botão
+  // precisa ser destravado na mão
+  if (S.refazer) bindPelicula(S.refazer, 'rf', () => {
+    const g = $('#rf-go');
+    if (g) { g.disabled = false; g.textContent = 'Refazer com estas mudanças'; }
   });
   app.querySelectorAll('[data-rf-mol]').forEach((b) => b.onclick = () => { S.refazer.moldura = b.dataset.rfMol; render(); });
   app.querySelectorAll('[data-rf-fun]').forEach((b) => b.onclick = () => {
@@ -1073,7 +1121,8 @@ function viewFila() {
     const R = S.refazer;
     rf.disabled = true; rf.textContent = 'enfileirando…';
     try {
-      const r = await api('requeue_ermos', { body: { id: R.id, moldura: R.moldura, fundoIds: R.fundoIds } });
+      const r = await api('requeue_ermos', { body: { id: R.id, moldura: R.moldura, fundoIds: R.fundoIds,
+        pelicula: R.pelicula, peliculaOp: R.peliculaOp } });
       S.refazer = null; await refresh();
       toast(`refazendo com ${r.mudou.join(' + ')} ↻`);
     } catch (e) { toast(e.message, true); render(); }

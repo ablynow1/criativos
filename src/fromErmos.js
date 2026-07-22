@@ -190,6 +190,17 @@ async function main() {
   let cur = '[0:v]';
   const N = quadros.length;
   const R = ritmo.toFixed(3);
+  // PELÍCULA: véu de cor sobre o FUNDO, por baixo de tudo. Entra antes do
+  // quadro e do texto de propósito — escurecer (ou clarear) só o cenário dá
+  // contraste pra legenda sem tocar na obra nem na moldura.
+  const PELI = { preta: 'black', branca: 'white' };
+  const peliCor = PELI[cfg.pelicula];
+  if (peliCor) {
+    const op = Math.max(0, Math.min(0.9, Number(cfg.peliculaOp ?? 0.3))).toFixed(2);
+    of += `[0:v]drawbox=x=0:y=0:w=iw:h=ih:color=${peliCor}@${op}:t=fill[pel];`;
+    cur = '[pel]';
+    console.log(`  película ${cfg.pelicula} a ${Math.round(op * 100)}%`);
+  }
   // Tudo escrito fica dentro do quadro seguro do Reels (1080x1920):
   // a UI do Instagram cobre o topo (220px) e o rodapé (450px). Além disso os
   // 1080x1440 de cima são a CAPA do Reels no perfil — o quadro mora aí.
