@@ -7,13 +7,13 @@
 <meta name="theme-color" content="#14100b">
 <meta name="robots" content="noindex,nofollow">
 <title>Quadros · Estúdio de Mockups</title>
-<link rel="stylesheet" href="assets/style.css?v=26">
+<link rel="stylesheet" href="assets/style.css?v=27">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
 </head>
 <body>
 <div id="app" aria-live="polite">
   <div class="boot"><div class="boot-mark">Quadros</div><div class="boot-sk"><i></i><i></i><i></i></div></div>
 </div>
-<script src="assets/app.js?v=26"></script>
+<script src="assets/app.js?v=27"></script>
 </body>
 </html>

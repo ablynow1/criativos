@@ -304,6 +304,15 @@ function loja_catalogo(array $CONFIG, int $paginasPorChamada = 4): array {
     @file_put_contents($cacheFile, json_encode($est, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     return $est;
 }
+// O id do YouTube acaba virando argumento do yt-dlp no Mac — só passa se for
+// exatamente um id (11 chars). Vale pro UGC e pro Ermos.
+function audio_limpo($a): array {
+    $a = is_array($a) ? $a : [];
+    $a['ytId'] = preg_match('/^[\w-]{11}$/', (string)($a['ytId'] ?? '')) ? $a['ytId'] : null;
+    $a['ytInicio'] = max(0, (int)($a['ytInicio'] ?? 0));
+    return $a;
+}
+
 // em pé / deitada / quadrada — a régua de 4% evita chamar de "deitada" uma
 // obra praticamente quadrada (1010x1000 é quadrada pra qualquer efeito prático)
 function orientacao(int $w, int $h): string {
@@ -634,7 +643,7 @@ if ($action === 'queue_mockup') {
                 'movimento' => $b['movimento'] ?? 'medio',
                 'duracaoAlvo' => (int)($b['duracaoAlvo'] ?? 25),
                 'abertura' => !empty($b['abertura']),
-                'audio' => $b['audio'] ?? new stdClass(),
+                'audio' => audio_limpo($b['audio'] ?? []),
                 'formatos' => (!empty($b['formatos']) && is_array($b['formatos'])) ? $b['formatos'] : ['9:16'],
             ],
             'status' => 'queued', 'pct' => 0, 'stage' => 'na fila', 'log' => [],

@@ -76,10 +76,15 @@ export async function mergeFinal({
   const fc = [];
 
   // narração: normaliza e clona pros sidechains do ducking
+  // apad até a duração do vídeo ANTES do split. Sem isso o sidechaincompress
+  // do ducking morre quando a fala acaba (ele para no mais curto dos dois
+  // lados) e leva junto ambiente e trilha: num vídeo de 15s com 4,7s de
+  // narração, os outros 10s saíam MUDOS. O -t no fim corta na medida.
+  const durAudio = (videoDuration + 0.3).toFixed(2);
   const scCopies = (useAmbient ? 1 : 0) + (useMusic ? 1 : 0);
   if (scCopies > 0) {
     const outs = ['[nar]', ...Array.from({ length: scCopies }, (_, i) => `[sc${i}]`)].join('');
-    fc.push(`[1:a]loudnorm=I=-16:TP=-2,aresample=48000,asplit=${scCopies + 1}${outs}`);
+    fc.push(`[1:a]loudnorm=I=-16:TP=-2,aresample=48000,apad=whole_dur=${durAudio},asplit=${scCopies + 1}${outs}`);
   } else {
     fc.push(`[1:a]loudnorm=I=-16:TP=-2,aresample=48000[nar]`);
   }
@@ -103,7 +108,11 @@ export async function mergeFinal({
 
   const mixIn = ['[nar]', useAmbient ? '[ambd]' : null, useMusic ? '[musd]' : null].filter(Boolean).join('');
   // master: -14 LUFS integrado (alvo das plataformas), true peak -1.5
-  fc.push(`${mixIn}amix=inputs=${layers}:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`);
+  // duration=LONGEST, nunca "first": "first" é a NARRAÇÃO, e ela quase sempre
+  // acaba antes do vídeo — o mix morria junto e o resto saía mudo (num vídeo de
+  // 15s com 4,7s de fala, 10s sem trilha e sem ambiente). O -t no final é quem
+  // corta na duração certa.
+  fc.push(`${mixIn}amix=inputs=${layers}:duration=longest:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`);
 
   // vídeo: legenda queimada
   fc.push(`[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles=${srtEscaped}:force_style='${styleString}'[vout]`);

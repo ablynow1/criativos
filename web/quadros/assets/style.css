@@ -193,6 +193,10 @@ nav.tabs button.on { background:var(--gold); color:#1a1206; }
 .chip.mol img { width:36px; height:48px; object-fit:cover; border-radius:4px;
   flex:none; background:#9a9a9e; }
 
+/* link discreto dentro de um hint */
+.linkish { border:0; background:transparent; color:var(--gold); font-size:inherit;
+  font-weight:650; padding:0; text-decoration:underline; text-underline-offset:2px; }
+
 /* painel "refazer" dentro do card do job pronto */
 .refazer { border:1px solid var(--gold); border-radius:11px; padding:11px 12px 12px;
   margin:10px 0 4px; background:#ffffff06; }

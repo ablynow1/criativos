@@ -7,6 +7,7 @@ import { generateVideoClip } from './generateVideoClip.js';
 import { generateNarration } from './generateNarration.js';
 import { generateSubtitles } from './generateSubtitles.js';
 import { generateMusic } from './musicGen.js';
+import { baixaTrilhaYoutube } from './trilhaYoutube.js';
 import { variarNarracao } from './variarNarracao.js';
 import { mergeFinal } from './mergeFinal.js';
 import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
@@ -188,7 +189,13 @@ async function main() {
   const temMusica = !!(audio.musica && audio.musica !== 'nenhuma');
 
   let musicPath = null;
-  if (temMusica) {
+  if (audio.ytId) {
+    // trilha do YouTube tem precedência sobre o mood gerado — quem escolheu
+    // uma música específica não quer a do Lyria por cima
+    musicPath = await baixaTrilhaYoutube({
+      ytId: audio.ytId, inicio: audio.ytInicio, duracao: duracaoAlvo, tmpDir,
+    });
+  } else if (temMusica) {
     console.log(`  trilha (${audio.musica})…`);
     musicPath = path.join(tmpDir, 'trilha.wav');
     try {

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { generateMusic } from './musicGen.js';
+import { baixaTrilhaYoutube } from './trilhaYoutube.js';
 import { runFfmpeg, getDurationSeconds, probeWH } from './ffmpeg.js';
 
 /**
@@ -150,24 +151,7 @@ async function main() {
   // trilha: YouTube (trecho escolhido) OU mood gerado pela Lyria OU nenhuma
   let musicPath = null;
   if (cfg.ytId) {
-    try {
-      const bruto = path.join(tmpDir, 'yt-bruto.m4a');
-      const ini = Math.max(0, Number(cfg.ytInicio) || 0);
-      console.log(`  baixando a trilha do YouTube (${cfg.ytId}) a partir de ${ini}s…`);
-      // baixa só a janela necessária (+2s de folga) — bem mais rápido que o áudio inteiro
-      await run('yt-dlp', ['-f', 'bestaudio', '-o', bruto, '--no-playlist', '--quiet', '--no-warnings',
-        '--download-sections', `*${ini}-${ini + Math.ceil(T) + 2}`, '--force-keyframes-at-cuts',
-        `https://www.youtube.com/watch?v=${cfg.ytId}`]);
-      musicPath = path.join(tmpDir, 'trilha.m4a');
-      // corta exatamente a duração do vídeo com fade de saída
-      await runFfmpeg(['-i', bruto, '-t', String(T),
-        '-af', `afade=t=in:d=0.6,afade=t=out:st=${Math.max(0, T - 1.5)}:d=1.5`,
-        '-c:a', 'aac', '-b:a', '192k', musicPath]);
-      console.log(`  trilha pronta (${T}s a partir de ${ini}s)`);
-    } catch (e) {
-      console.error(`  trilha do YouTube falhou (seguindo sem): ${String(e.message).slice(0, 140)}`);
-      musicPath = null;
-    }
+    musicPath = await baixaTrilhaYoutube({ ytId: cfg.ytId, inicio: cfg.ytInicio, duracao: T, tmpDir });
   } else if (cfg.musica && cfg.musica !== 'nenhuma') {
     try {
       musicPath = path.join(tmpDir, 'trilha.wav');

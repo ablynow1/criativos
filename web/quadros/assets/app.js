@@ -41,6 +41,12 @@ const MOLDURAS_PRESET = [
 const chipMoldura = (id, lb, ativo, attr) =>
   `<button class="chip mol ${ativo ? 'on' : ''}" ${attr}="${id}">
      <img src="assets/molduras/${id}.jpg" alt="">${lb}</button>`;
+// qual dos 4 presets o cenário usou (o registro guarda a descrição em inglês).
+// null = moldura escrita à mão, aí não tem foto pra mostrar.
+function molduraDoCenario(c) {
+  const en = (c && c.moldura) || '';
+  return (MOLDURAS_PRESET.find(([id]) => MOLDURA_EN[id] === en) || [null])[0];
+}
 const MOLDURA_EN = {
   preto: 'a thin matte-black wooden moulding',
   branco: 'a clean matte-white wooden moulding',
@@ -262,7 +268,8 @@ function fmtT(s) {
 
 function viewYoutube() {
   const Y = S.yt;
-  const dur = S.mk.duracaoErmos;
+  // a janela da música é a duração do vídeo do formato que ele está montando
+  const dur = S.mk.formato === 'ermos' ? S.mk.duracaoErmos : S.mk.duracaoAlvo;
   const cells = Y.videos.map((v, i) => `
     <div class="yt-item ${Y.sel && Y.sel.id === v.id ? 'sel' : ''}" data-ytv="${i}">
       <img src="${esc(v.thumb)}" alt="" loading="lazy">
@@ -733,7 +740,14 @@ function viewNovo() {
   // total de vídeos = artes × cenários (matriz) ou 1 por arte (um/sortear)
   const total = m.artes.length * (multi && m.modo === 'matriz' ? m.cenarioIds.length : 1);
   const estClipes = total * 5;
-  const cenChips = aprovados.map((c) => `<button class="chip ${m.cenarioIds.includes(c.id) ? 'on' : ''}" data-cen="${esc(c.id)}">${esc(c.nome)}</button>`).join('');
+  // no UGC a moldura é FÍSICA na cena (nasce nos keyframes), então ela não se
+  // escolhe aqui — mas dá pra ver qual cada palco tem, com a foto do pau
+  const cenChips = aprovados.map((c) => {
+    const mid = molduraDoCenario(c);
+    const sel = m.cenarioIds.includes(c.id);
+    return `<button class="chip ${mid ? 'mol' : ''} ${sel ? 'on' : ''}" data-cen="${esc(c.id)}">
+      ${mid ? `<img src="assets/molduras/${mid}.jpg" alt="">` : ''}${esc(c.nome)}</button>`;
+  }).join('');
   const modoChips = [['sortear', '🎲 sortear (1 vídeo/arte, cenário aleatório)'], ['matriz', '⚡ matriz (todas × todos)']]
     .map(([id, lb]) => `<button class="chip ${m.modo === id ? 'on' : ''}" data-modo="${id}">${lb}</button>`).join('');
   const moveChips = ['calmo', 'medio', 'dinamico'].map((x) => `<button class="chip ${m.movimento === x ? 'on' : ''}" data-move="${x}">${x}</button>`).join('');
@@ -755,6 +769,8 @@ function viewNovo() {
       <div class="chips">${cenChips}</div>
       ${multi ? `<div class="chips" style="margin-top:8px">${modoChips}</div>
       <div class="hint">${m.modo === 'matriz' ? 'cada arte vira 1 vídeo em CADA cenário selecionado' : 'cada arte vira 1 vídeo num cenário sorteado do pool'}</div>` : ''}
+      <div class="hint">Aqui a moldura é o quadro de verdade que a pessoa segura — vem do palco, não dá pra trocar na hora.
+        ${umCen ? `<button class="linkish" data-dup-cen="${esc(umCen.id)}">criar este palco com outra moldura →</button>` : ''}</div>
     </div>
     <div class="field"><label>Arte${m.artes.length > 1 ? 's' : ''} do quadro ${m.artes.length ? `· ${m.artes.length}` : ''}</label>
       <div class="artes-row">${artesHtml}
@@ -772,7 +788,17 @@ function viewNovo() {
     <div class="field"><label>Legenda queimada</label><div class="chips">${legChips}</div></div>
     ${total > 1 ? `<div class="row"><span class="rl">Variar a copy por vídeo (ganchos diferentes)</span><button class="tg ${m.variar ? 'on' : ''}" id="mk-var"></button></div>
     <div class="hint" style="margin:6px 0 10px">Cada vídeo do lote abre com um ângulo diferente (pergunta, dor, prova…) mantendo sua oferta.</div>` : ''}` : ''}
-    <div class="field"><label>Trilha musical</label><div class="chips">${triChips}</div></div>
+    <div class="field"><label>Trilha musical</label>
+      <div class="chips">${triChips}
+        <button class="chip ${m.ytId ? 'on' : ''}" data-yt-abrir="1">▶ do YouTube</button></div>
+      ${m.ytId ? `<div class="yt-sel">
+        <img src="https://i.ytimg.com/vi/${esc(m.ytId)}/mqdefault.jpg" alt="">
+        <div class="yt-info"><b>${esc(m.ytTitulo || m.ytId)}</b>
+          <span>começa em <b>${fmtT(m.ytInicio || 0)}</b> · pega ${m.duracaoAlvo}s</span></div>
+        <button class="btn sm ghost" data-yt-abrir="1">trocar</button>
+      </div>` : ''}
+      ${m.ytId && temNarr ? '<div class="hint">a narração continua por cima — a trilha abaixa sozinha quando você fala</div>' : ''}
+    </div>
     <div class="row"><span class="rl">Exportar também 4:5 (feed do Meta)</span><button class="tg ${m.fmt45 ? 'on' : ''}" id="mk-45"></button></div>
     ${umCen && umCen.temAbertura ? `<div class="row"><span class="rl">Abrir com reveal do verso</span><button class="tg ${m.abertura ? 'on' : ''}" id="mk-ab"></button></div>` : ''}
     <div class="spacer"></div>
@@ -791,11 +817,24 @@ function viewNovo() {
     else m.cenarioIds.push(id);
     render();
   });
+  // mesmo palco, outra moldura: cai no fluxo de duplicar (a moldura é física,
+  // então o palco tem que nascer de novo com ela)
+  app.querySelectorAll('[data-dup-cen]').forEach((b) => b.onclick = () => {
+    const c = S.cenarios.find((x) => x.id === b.dataset.dupCen);
+    if (!c) return;
+    S.cn = { ...S.cn, descricao: '', avatarText: '', ambienteText: '', molduraText: '', molduraId: null,
+      nome: '', movimento: c.movimento || 'medio', temAbertura: false, duplicarDe: c.id, duplicarNome: c.nome };
+    S.screen = 'novo-cenario'; render();
+  });
   app.querySelectorAll('[data-modo]').forEach((b) => b.onclick = () => { m.modo = b.dataset.modo; render(); });
   app.querySelectorAll('[data-move]').forEach((b) => b.onclick = () => { m.movimento = b.dataset.move; render(); });
   app.querySelectorAll('[data-dur]').forEach((b) => b.onclick = () => { m.duracaoAlvo = +b.dataset.dur; render(); });
   app.querySelectorAll('[data-voz]').forEach((b) => b.onclick = () => { m.voz = b.dataset.voz; render(); });
-  app.querySelectorAll('[data-tri]').forEach((b) => b.onclick = () => { m.musica = b.dataset.tri; render(); });
+  app.querySelectorAll('[data-tri]').forEach((b) => b.onclick = () => {
+    m.musica = b.dataset.tri; m.ytId = null; m.ytTitulo = '';   // um OU outro
+    render();
+  });
+  app.querySelectorAll('[data-yt-abrir]').forEach((b) => b.onclick = () => { S.screen = 'youtube'; render(); });
   app.querySelectorAll('[data-leg]').forEach((b) => b.onclick = () => { m.legenda = b.dataset.leg; render(); });
   app.querySelectorAll('[data-delarte]').forEach((b) => b.onclick = () => { m.artes.splice(+b.dataset.delarte, 1); render(); });
   const narr = $('#mk-narr'); if (narr) narr.oninput = (e) => { const was = temNarr; m.narracao = e.target.value; if (was !== !!m.narracao.trim()) render(); };
@@ -810,7 +849,8 @@ function viewNovo() {
         modo: multi ? m.modo : 'um',
         arteUrls: m.artes.map((a) => a.url),
         nome: '', movimento: m.movimento, duracaoAlvo: m.duracaoAlvo, abertura: m.abertura,
-        audio: { narracao: m.narracao.trim(), voz: m.voz, musica: m.musica, legenda: m.legenda, variar: m.variar && total > 1 },
+        audio: { narracao: m.narracao.trim(), voz: m.voz, musica: m.musica, legenda: m.legenda,
+          ytId: m.ytId, ytInicio: m.ytInicio, variar: m.variar && total > 1 },
         formatos: m.fmt45 ? ['9:16', '4:5'] : ['9:16'],
       } });
       const n = (r.jobs || []).length;
