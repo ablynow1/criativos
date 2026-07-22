@@ -527,6 +527,10 @@ function orientTravada() {
 
 function viewLoja() {
   const L = S.loja;
+  // agora que a tela tem endereço próprio, dá pra cair aqui direto pela URL —
+  // e aí ninguém tinha buscado o catálogo (a carga só existia no clique).
+  // Fora do render pra não reentrar nele no meio da montagem.
+  if (!L.produtos.length && !L.carregando && !L.erro) queueMicrotask(carregaLoja);
   const sel = new Set(S.mk.artes.map((a) => a.url));
   const trava = orientTravada();
   const cells = L.produtos.map((p, i) => {
@@ -606,7 +610,12 @@ async function carregaLoja() {
     if (r.artistas) S.loja.artistas = r.artistas;
     if (r.orientacoes) S.loja.orientacoes = r.orientacoes;
     S.loja.completo = r.completo !== false;
-  } catch (e) { toast(e.message, true); }
+    S.loja.erro = null;
+  } catch (e) {
+    // marca o erro pra não entrar em laço de re-tentativa vindo do render
+    S.loja.erro = e.message;
+    toast(e.message, true);
+  }
   S.loja.carregando = false; render();
   // catálogo grande vem em partes: continua puxando até completar
   if (!S.loja.completo && S.screen === 'loja') setTimeout(() => carregaLoja(), 400);
@@ -955,6 +964,7 @@ function viewNovo() {
     <div class="field"><label>Arte${m.artes.length > 1 ? 's' : ''} do quadro ${m.artes.length ? `· ${m.artes.length}` : ''}</label>
       <div class="artes-row">${artesHtml}
         <div class="drop mini" id="drop"><div class="t">${m.artes.length ? '+ mais' : 'subir'}</div></div>
+        <button class="btn sm ghost" id="da-loja" style="align-self:center">🛍 da loja</button>
       </div>
       <div class="hint">png · jpg · webp — pode selecionar várias de uma vez (lote de teste A/B)</div>
     </div>
@@ -1032,6 +1042,9 @@ function viewNovo() {
   const t45 = $('#mk-45'); if (t45) t45.onclick = () => { m.fmt45 = !m.fmt45; render(); };
   const ab = $('#mk-ab'); if (ab) ab.onclick = () => { m.abertura = !m.abertura; render(); };
   $('#drop').onclick = pickArtes;
+  // a loja (5124 obras) também no UGC — antes só o Ermos tinha, e a jornada
+  // de 'gerar UGC com arte da loja' só rodava por gambiarra
+  $('#da-loja').onclick = () => { S.screen = 'loja'; render(); if (!S.loja.produtos.length) carregaLoja(); };
   $('#mk-go').onclick = async () => {
     try {
       const r = await api('queue_mockup', { body: {
@@ -1403,7 +1416,16 @@ function viewFila() {
   const act = async (op, id) => { try { await api('job_action', { body: { op, job_id: id } }); await refresh(); } catch (e) { toast(e.message, true); } };
   app.querySelectorAll('[data-retry]').forEach((b) => b.onclick = () => act('retry', b.dataset.retry));
   app.querySelectorAll('[data-cancel]').forEach((b) => b.onclick = () => act('cancel', b.dataset.cancel));
-  app.querySelectorAll('[data-djob]').forEach((b) => b.onclick = () => act('delete', b.dataset.djob));
+  // apagar APAGA o arquivo de vídeo do servidor, e o botão fica encostado no
+  // Refazer. Um toque errado custava um render inteiro — agora pergunta.
+  app.querySelectorAll('[data-djob]').forEach((b) => b.onclick = () => {
+    const j = S.jobs.find((x) => x.id === b.dataset.djob);
+    const temArquivo = j && j.video;
+    if (!confirm(temArquivo
+      ? `Apagar "${j.nome}"?\n\nO arquivo do vídeo vai junto — isso não tem volta.`
+      : 'Tirar este trabalho da lista?')) return;
+    act('delete', b.dataset.djob);
+  });
   app.querySelectorAll('[data-goto-cen]').forEach((b) => b.onclick = () => { S.tab = 'cenarios'; render(); });
   app.querySelectorAll('[data-refazer]').forEach((b) => b.onclick = () => {
     const id = b.dataset.refazer;
