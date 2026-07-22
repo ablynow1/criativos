@@ -99,25 +99,132 @@ function renderLogin() {
 }
 
 // ---------- SHELL ----------
-function shell(inner) {
-  const emHome = S.tab === 'cenarios' && !S.screen && !S.catFiltro;
-  const tab = (id, label) => `<button class="${S.tab === id && !S.screen ? 'on' : ''}" data-tab="${id}">${IC[id]}<span>${label}</span></button>`;
+/* ================================================================ ROTA ====
+   A URL é a fonte da verdade da navegação. Antes o app inteiro vivia em três
+   variáveis de memória (S.tab/S.screen/S.catFiltro): o Voltar do navegador e o
+   gesto de voltar do iPhone saíam do estúdio, e recarregar perdia tudo.
+   Aqui o estado continua sendo escrito pelos handlers — o que muda é que toda
+   tela vira um endereço, e o endereço sabe voltar a virar estado.          */
+
+function rotaDeEstado() {
+  const { tab, screen, catFiltro } = S;
+  if (screen === 'novo-cenario') return '/palco/novo';
+  if (screen === 'categorias') return '/categorias';
+  if (screen === 'molduras') return '/molduras';
+  if (screen === 'loja') return '/novo/loja';
+  if (screen === 'youtube') return '/novo/trilha';
+  if (screen && screen.startsWith('aprovar:')) return `/palco/${screen.slice(8)}`;
+  if (tab === 'cenarios') return catFiltro ? `/inicio/${catFiltro}` : '/inicio';
+  return `/${tab}`;
+}
+
+function estadoDeRota(hash) {
+  const p = String(hash || '').replace(/^#\/?/, '').split('/').filter(Boolean);
+  const base = { tab: 'cenarios', screen: null, catFiltro: null };
+  if (!p.length || p[0] === 'inicio') return { ...base, catFiltro: p[1] || null };
+  if (p[0] === 'palco') {
+    return p[1] === 'novo' ? { ...base, screen: 'novo-cenario' }
+                           : { ...base, screen: `aprovar:${p[1]}` };
+  }
+  if (p[0] === 'categorias') return { ...base, screen: 'categorias' };
+  if (p[0] === 'molduras') return { ...base, screen: 'molduras' };
+  if (p[0] === 'novo') {
+    return { ...base, tab: 'novo',
+      screen: p[1] === 'loja' ? 'loja' : p[1] === 'trilha' ? 'youtube' : null };
+  }
+  if (['fila', 'galeria', 'ajustes'].includes(p[0])) return { ...base, tab: p[0] };
+  return base;
+}
+
+// ---------- SHELL ----------
+// Monta o esqueleto UMA vez por rota e depois só troca o miolo. Antes cada
+// toque em chip refazia header + main + nav e religava todos os handlers.
+let rotaMontada = null;
+const scrollPorRota = new Map();
+
+function montaEsqueleto() {
+  const tab = (id, label) =>
+    `<button data-tab="${id}">${IC[id]}<span>${label}</span></button>`;
   app.innerHTML = `
-    <header class="top">${emHome ? '' : '<button class="top-back" id="top-home">‹ home</button>'}<span class="mk">Quadros</span><span class="sp"></span></header>
-    <main>${inner}</main>
+    <header class="top"><button class="top-back" id="top-home" hidden>‹ home</button><span class="mk">Quadros</span><span class="sp"></span></header>
+    <main></main>
     <nav class="tabs">
       ${tab('cenarios', 'Início')}${tab('novo', 'Novo')}${tab('fila', 'Fila')}${tab('galeria', 'Galeria')}${tab('ajustes', 'Ajustes')}
     </nav>`;
   app.querySelectorAll('nav.tabs button').forEach((b) => {
     b.onclick = () => {
       S.tab = b.dataset.tab; S.screen = null;
-      if (b.dataset.tab === 'cenarios') S.catFiltro = null; // Início = home das pastas
+      if (b.dataset.tab === 'cenarios') S.catFiltro = null;   // Início = home das pastas
       render();
     };
   });
-  const hb = $('#top-home');
-  if (hb) hb.onclick = () => { S.tab = 'cenarios'; S.screen = null; S.catFiltro = null; render(); };
+  $('#top-home').onclick = () => { S.tab = 'cenarios'; S.screen = null; S.catFiltro = null; render(); };
 }
+
+function pintaNav() {
+  const emHome = S.tab === 'cenarios' && !S.screen && !S.catFiltro;
+  $('#top-home').hidden = emHome;
+  app.querySelectorAll('nav.tabs button').forEach((b) => {
+    b.classList.toggle('on', S.tab === b.dataset.tab && !S.screen);
+  });
+  // quantos trabalhos estão rodando — some quando não há nenhum
+  const rodando = S.jobs.filter((j) => ['queued', 'claimed', 'running'].includes(j.status)).length;
+  const alvo = app.querySelector('nav.tabs [data-tab="fila"]');
+  let bd = alvo.querySelector('.badge');
+  if (rodando) {
+    if (!bd) { bd = document.createElement('i'); bd.className = 'badge'; alvo.appendChild(bd); }
+    bd.textContent = rodando;
+  } else if (bd) bd.remove();
+}
+
+function shell(inner) {
+  const rota = rotaDeEstado();
+  const trocou = rota !== rotaMontada;
+  if (!app.querySelector('main')) montaEsqueleto();
+  if (trocou && rotaMontada) scrollPorRota.set(rotaMontada, window.scrollY);
+
+  // guarda foco e cursor: a mesma tela sendo repintada (busca da loja, lista
+  // que chegou) não pode arrancar o campo de baixo do dedo
+  const ativo = document.activeElement;
+  const foco = ativo && ativo.id && app.contains(ativo)
+    ? { id: ativo.id, ini: ativo.selectionStart, fim: ativo.selectionEnd } : null;
+  const y = window.scrollY;
+
+  app.querySelector('main').innerHTML = inner;
+  pintaNav();
+
+  if (trocou) {
+    rotaMontada = rota;
+    const salvo = scrollPorRota.get(rota) || 0;
+    requestAnimationFrame(() => window.scrollTo(0, salvo));
+  } else {
+    if (window.scrollY !== y) window.scrollTo(0, y);
+    if (foco) {
+      const el = document.getElementById(foco.id);
+      if (el) {
+        el.focus({ preventScroll: true });
+        try { el.setSelectionRange(foco.ini, foco.fim); } catch (_) { /* input sem seleção */ }
+      }
+    }
+  }
+  sincronizaUrl(rota);
+}
+
+// escreve a rota na barra de endereço sem empilhar duplicata
+let ignoraPop = false;
+function sincronizaUrl(rota) {
+  const alvo = `#${rota}`;
+  if (location.hash === alvo) return;
+  ignoraPop = true;
+  history.pushState({ rota }, '', alvo);
+  ignoraPop = false;
+}
+
+window.addEventListener('popstate', () => {
+  if (ignoraPop) return;
+  Object.assign(S, estadoDeRota(location.hash));
+  render();
+});
 
 // ---------- CENÁRIOS ----------
 function catNome(id) {
@@ -784,10 +891,12 @@ function viewNovo() {
       <textarea id="mk-narr" placeholder="ex: Transforme a foto que você ama numa obra de arte de verdade…">${esc(m.narracao)}</textarea>
       <div class="hint">~${m.duracaoAlvo === 15 ? '30-40' : '55-70'} palavras cabem em ${m.duracaoAlvo}s. Vazio = só som ambiente.</div>
     </div>
-    ${temNarr ? `<div class="field"><label>Voz</label><div class="chips">${vozChips}</div></div>
-    <div class="field"><label>Legenda queimada</label><div class="chips">${legChips}</div></div>
-    ${total > 1 ? `<div class="row"><span class="rl">Variar a copy por vídeo (ganchos diferentes)</span><button class="tg ${m.variar ? 'on' : ''}" id="mk-var"></button></div>
-    <div class="hint" style="margin:6px 0 10px">Cada vídeo do lote abre com um ângulo diferente (pergunta, dor, prova…) mantendo sua oferta.</div>` : ''}` : ''}
+    <div id="mk-narr-extras" ${temNarr ? '' : 'hidden'}>
+      <div class="field"><label>Voz</label><div class="chips">${vozChips}</div></div>
+      <div class="field"><label>Legenda queimada</label><div class="chips">${legChips}</div></div>
+      ${total > 1 ? `<div class="row"><span class="rl">Variar a copy por vídeo (ganchos diferentes)</span><button class="tg ${m.variar ? 'on' : ''}" id="mk-var"></button></div>
+      <div class="hint" style="margin:6px 0 10px">Cada vídeo do lote abre com um ângulo diferente (pergunta, dor, prova…) mantendo sua oferta.</div>` : ''}
+    </div>
     <div class="field"><label>Trilha musical</label>
       <div class="chips">${triChips}
         <button class="chip ${m.ytId ? 'on' : ''}" data-yt-abrir="1">▶ do YouTube</button></div>
@@ -837,7 +946,15 @@ function viewNovo() {
   app.querySelectorAll('[data-yt-abrir]').forEach((b) => b.onclick = () => { S.screen = 'youtube'; render(); });
   app.querySelectorAll('[data-leg]').forEach((b) => b.onclick = () => { m.legenda = b.dataset.leg; render(); });
   app.querySelectorAll('[data-delarte]').forEach((b) => b.onclick = () => { m.artes.splice(+b.dataset.delarte, 1); render(); });
-  const narr = $('#mk-narr'); if (narr) narr.oninput = (e) => { const was = temNarr; m.narracao = e.target.value; if (was !== !!m.narracao.trim()) render(); };
+  // oninput NUNCA re-renderiza: era isso que fechava o teclado do iPhone na
+  // primeira letra. Os blocos que dependem da narração já estão no DOM e só
+  // aparecem/somem.
+  const narr = $('#mk-narr');
+  if (narr) narr.oninput = (e) => {
+    m.narracao = e.target.value;
+    const extras = $('#mk-narr-extras');
+    if (extras) extras.hidden = !m.narracao.trim();
+  };
   const tvar = $('#mk-var'); if (tvar) tvar.onclick = () => { m.variar = !m.variar; render(); };
   const t45 = $('#mk-45'); if (t45) t45.onclick = () => { m.fmt45 = !m.fmt45; render(); };
   const ab = $('#mk-ab'); if (ab) ab.onclick = () => { m.abertura = !m.abertura; render(); };
@@ -1226,6 +1343,7 @@ function viewAjustes() {
 // ---------- ROUTER ----------
 function render() {
   if (!S.auth) return renderLogin();
+  salvaRascunho();
   if (S.screen === 'novo-cenario') return viewNovoCenario();
   if (S.screen === 'categorias') return viewCategorias();
   if (S.screen === 'molduras') return viewMolduras();
@@ -1249,11 +1367,13 @@ async function refresh() {
 }
 
 let pollT, lastSig = '';
-// há vídeo tocando na tela? (o re-render destrói o <video> e cortaria a
-// reprodução no meio — então segura a atualização enquanto o Vitor assiste)
-function assistindo() {
-  // vídeo tocando OU escolhendo trilha no YouTube (o iframe morre no re-render)
+// A tela está OCUPADA com o usuário? O poll nunca pode repintar por cima de
+// alguém digitando (o teclado do iPhone fechava na primeira letra), assistindo
+// um vídeo, ou escolhendo o trecho da trilha (o iframe reiniciava a música).
+function ocupado() {
   if (S.screen === 'youtube') return true;
+  const a = document.activeElement;
+  if (a && app.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
   return [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended);
 }
 
@@ -1263,24 +1383,52 @@ function startPoll() {
     try {
       const { jobs } = await api('jobs');
       const sig = jobs.map((j) => `${j.id}:${j.status}:${j.pct}`).join('|');
-      if (sig !== lastSig) {
-        // se um cenário acabou de ficar pronto, recarrega o state (traz thumbs)
-        const st = await api('state');
-        S.cenarios = st.cenarios || []; S.jobs = st.jobs || [];
-        if (assistindo()) return;   // mantém lastSig: re-renderiza quando pausar
-        lastSig = sig;
-        render();
-      }
+      if (sig === lastSig) return;
+      // se um cenário acabou de ficar pronto, recarrega o state (traz thumbs)
+      const st = await api('state');
+      S.cenarios = st.cenarios || []; S.jobs = st.jobs || [];
+      // o contador da aba Fila é barato e não mexe no miolo: atualiza sempre
+      if (app.querySelector('nav.tabs')) pintaNav();
+      if (ocupado()) return;        // mantém lastSig: repinta assim que ele soltar
+      lastSig = sig;
+      render();
     } catch (e) { /* silencioso */ }
   }, 5000);
+}
+
+/* ------------------------------------------------------------ RASCUNHO ---
+   Sair pro WhatsApp e voltar, ou recarregar sem querer, não pode apagar um
+   criativo montado pela metade. Guardamos os dois formulários no aparelho.
+   As prévias de upload (blob:) não sobrevivem ao recarregar — caem pra URL
+   do servidor, que é permanente.                                          */
+const RASCUNHO = 'quadros:rascunho:v1';
+
+function salvaRascunho() {
+  try {
+    const mk = { ...S.mk, artes: S.mk.artes.map((a) => ({ ...a, prev: a.url })) };
+    localStorage.setItem(RASCUNHO, JSON.stringify({ mk, cn: S.cn }));
+  } catch (_) { /* aba anônima / cota cheia */ }
+}
+
+function carregaRascunho() {
+  try {
+    const d = JSON.parse(localStorage.getItem(RASCUNHO) || 'null');
+    if (!d) return;
+    if (d.mk) Object.assign(S.mk, d.mk);
+    if (d.cn) Object.assign(S.cn, d.cn);
+  } catch (_) { /* rascunho corrompido: ignora */ }
 }
 
 async function boot() {
   try {
     const me = await api('me');
     S.auth = !!me.auth;
-    if (S.auth) { await refresh(); startPoll(); }
-    else renderLogin();
+    if (!S.auth) return renderLogin();
+    carregaRascunho();
+    // a URL manda: recarregar a página cai na MESMA tela, não na home
+    Object.assign(S, estadoDeRota(location.hash));
+    await refresh();
+    startPoll();
   } catch (e) { renderLogin(); }
 }
 
