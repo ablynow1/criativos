@@ -31,15 +31,21 @@ import cv2
 import numpy as np
 
 
-def candidato(img, lab, hsv, chao, sat_chao, tol):
+def candidato(img, lab, hsv, chao, sat_chao, tol, abrir=True):
     """Maior mancha 'nao-chao' que nao encosta na borda da foto — o que encosta
     e' cenario (prateleira, movel), a moldura esta inteira no enquadramento.
     A saturacao entra junto porque moldura de madeira clara tem quase a mesma
-    luminancia do concreto: o que a separa e' ser quente."""
+    luminancia do concreto: o que a separa e' ser quente.
+
+    `abrir=False` em fundo liso: moldura branca recortada tem trechos estourados
+    em branco PURO — a mascara do pau fica esburacada e o OPEN apagava o que
+    restava, sobrando so' o kraft (o quadro saia sem moldura nenhuma). O CLOSE
+    largo preenche os buracos; sem ruido de cenario, o OPEN nao faz falta."""
     obj = (((np.abs(lab - chao).sum(axis=2) >= tol) | (hsv[..., 1] > sat_chao + 22))
            .astype(np.uint8)) * 255
-    obj = cv2.morphologyEx(obj, cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8))
-    obj = cv2.morphologyEx(obj, cv2.MORPH_OPEN, np.ones((21, 21), np.uint8))
+    obj = cv2.morphologyEx(obj, cv2.MORPH_CLOSE, np.ones((31, 31), np.uint8))
+    if abrir:
+        obj = cv2.morphologyEx(obj, cv2.MORPH_OPEN, np.ones((21, 21), np.uint8))
     cnts, _ = cv2.findContours(obj, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     h, w = img.shape[:2]
     livres = [c for c in cnts if (lambda r: r[0] > 2 and r[1] > 2
@@ -68,9 +74,15 @@ def quad_externo(img):
     chao = np.median(bordas(lab), axis=0)
     sat_chao = np.percentile(bordas(hsv)[:, 1], 90)
 
+    # fundo LISO (recorte do Canva/Photoshop achatado em branco puro): o desvio
+    # da borda é ~zero. Ai a tolerancia pode ser minuscula — e PRECISA ser,
+    # senao moldura branca em fundo branco escapa por baixo do limiar.
+    uniforme = float(bordas(lab).std(axis=0).sum()) < 4.0
+    tols = (24, 16, 10, 6) if uniforme else (70, 62, 55, 48, 42, 36)
+
     c = None
-    for tol in (70, 62, 55, 48, 42, 36):   # do exigente pro tolerante
-        c = candidato(img, lab, hsv, chao, sat_chao, tol)
+    for tol in tols:                       # do exigente pro tolerante
+        c = candidato(img, lab, hsv, chao, sat_chao, tol, abrir=not uniforme)
         if c is not None:
             break
     if c is None:
@@ -89,7 +101,7 @@ def quad_externo(img):
     d_ = np.diff(quad, axis=1).ravel()
     ordenado = np.array([quad[np.argmin(s_)], quad[np.argmin(d_)],
                          quad[np.argmax(s_)], quad[np.argmax(d_)]], np.float32)
-    return ordenado, chao
+    return ordenado, chao, uniforme
 
 
 def apara_chao(plano, chao, max_apara=0.06):
@@ -145,6 +157,65 @@ def apara_franja(plano, boca, max_apara=0.09):
     b = franja([lab[H - 1 - y, n0:n1] for y in range(H)],
                np.median(lab[(bot + H) // 2, n0:n1], axis=0), ty)
     return plano[t:H - b, e:W - d], (e, t, d, b)
+
+
+def quad_do_miolo(img):
+    """4 cantos do MIOLO kraft (quente + saturado). So' presta quando o pau NAO
+    e' cor de madeira — em moldura preta/branca o kraft e' a unica mancha
+    quente da foto e seus cantos sao nitidos. Miolo e moldura sao coplanares:
+    retificar pelo miolo endireita a moldura junto, e com mais precisao que os
+    cantos externos (que borram quando o recorte estoura no branco)."""
+    hsv = cv2.cvtColor(cv2.GaussianBlur(img, (7, 7), 0), cv2.COLOR_BGR2HSV)
+    m = cv2.inRange(hsv, (5, 45, 45), (32, 255, 255))
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((15, 15), np.uint8))
+    cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return None
+    c = max(cnts, key=cv2.contourArea)
+    if cv2.contourArea(c) < 0.10 * img.shape[0] * img.shape[1]:
+        return None
+    per = cv2.arcLength(c, True)
+    quad = None
+    for k in np.arange(0.01, 0.06, 0.003):
+        ap = cv2.approxPolyDP(c, k * per, True)
+        if len(ap) == 4:
+            quad = ap.reshape(4, 2).astype(np.float32)
+            break
+    if quad is None:
+        return None
+    s_ = quad.sum(axis=1)
+    d_ = np.diff(quad, axis=1).ravel()
+    return np.array([quad[np.argmin(s_)], quad[np.argmin(d_)],
+                     quad[np.argmax(s_)], quad[np.argmax(d_)]], np.float32)
+
+
+def retifica_pelo_miolo(img, quadM, chao):
+    """Warpa a foto pra o MIOLO virar um retangulo perfeito (a moldura, coplanar,
+    endireita junto) e recorta na borda externa varrendo contra o fundo."""
+    larg = int(round((np.linalg.norm(quadM[1] - quadM[0]) + np.linalg.norm(quadM[2] - quadM[3])) / 2))
+    alt = int(round((np.linalg.norm(quadM[3] - quadM[0]) + np.linalg.norm(quadM[2] - quadM[1])) / 2))
+    p = int(min(larg, alt) * 0.25)          # folga: a moldura mora aqui
+    dst = np.array([[p, p], [p + larg, p], [p + larg, p + alt], [p, p + alt]], np.float32)
+    H = cv2.getPerspectiveTransform(quadM, dst)
+    plano = cv2.warpPerspective(img, H, (larg + 2 * p, alt + 2 * p), flags=cv2.INTER_CUBIC,
+                                borderMode=cv2.BORDER_REPLICATE)
+    lab = cv2.cvtColor(cv2.GaussianBlur(plano, (5, 5), 0), cv2.COLOR_BGR2LAB).astype(np.float32)
+    Hh, Ww = lab.shape[:2]
+
+    def externo(faixa_em, teto):
+        """de FORA pra dentro: profundidade onde o fundo acaba (mediana da faixa)"""
+        for i in range(teto):
+            if np.abs(np.median(faixa_em(i), axis=0) - chao).sum() >= 12:
+                return i
+        return 0   # nao achou transicao: nao corta nada
+
+    m0, m1, n0, n1 = int(Hh * 0.25), int(Hh * 0.75), int(Ww * 0.25), int(Ww * 0.75)
+    e = externo(lambda i: lab[m0:m1, i], p)
+    d = externo(lambda i: lab[m0:m1, Ww - 1 - i], p)
+    t = externo(lambda i: lab[i, n0:n1], p)
+    b = externo(lambda i: lab[Hh - 1 - i, n0:n1], p)
+    return plano[t:Hh - b, e:Ww - d]
 
 
 def retifica(img, quad):
@@ -205,8 +276,29 @@ def main():
     if img is None:
         sys.exit(f'imagem ilegivel: {args.inp}')
 
-    quad, chao = quad_externo(img)
-    plano, _ = apara_chao(retifica(img, quad), chao)
+    quad, chao, uniforme = quad_externo(img)
+    # PREFERE retificar pelo miolo: os cantos do kraft sao nitidos, os externos
+    # borram quando o recorte estoura no branco (a moldura saia torta). So' vale
+    # quando o miolo e' a unica mancha quente — em pau de madeira ele vaza.
+    quadM = quad_do_miolo(img) if uniforme else None
+    if quadM is not None:
+        hsvM = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        # o pau e' cor de madeira? amostra o anel entre o miolo e a borda externa
+        cx, cy = quadM.mean(axis=0)
+        esc = 1.12
+        anel = ((quadM - [cx, cy]) * esc + [cx, cy]).astype(int)
+        cores = [hsvM[min(max(y, 0), img.shape[0] - 1), min(max(x, 0), img.shape[1] - 1)] for x, y in anel]
+        pau_quente = np.mean([(5 <= c[0] <= 32 and c[1] >= 45) for c in cores]) > 0.5
+        if pau_quente:
+            quadM = None
+    if quadM is not None:
+        plano = retifica_pelo_miolo(img, quadM, chao)
+    else:
+        plano = retifica(img, quad)
+        # a franja de chao so' existe em foto crua. Em recorte de fundo liso o
+        # apara_chao e' VENENO: pau branco ≈ fundo branco, comia a moldura toda.
+        if not uniforme:
+            plano, _ = apara_chao(plano, chao)
     # aparar muda a boca e a boca e' a referencia pra aparar: duas passadas
     # bastam (a segunda so' confirma que nao sobrou nada)
     apara = (0, 0, 0, 0)
