@@ -30,14 +30,28 @@ export const CENARIO_1 = {
   versoKeyframe: 'K15', // verso real do quadro físico do Vitor (aprovado)
 };
 
+// O Nano Banana NÃO tem negativePrompt — as exclusões vão no corpo do prompt.
+// Este bloco fecha os buracos por onde saem os artefatos clássicos que matam
+// um anúncio: marca d'água, texto fantasma, dedo a mais, moldura torta.
+const IMG_GUARD =
+  'Image integrity: pristine full-bleed photograph — absolutely free of watermarks, '
+  + 'logos, on-screen text, captions, UI elements, borders or vignettes. Hands are '
+  + 'anatomically correct with five natural fingers each. The picture-frame moulding '
+  + 'has perfectly straight edges and true right-angle corners — never bent, bowed or warped.';
+
 // Bloco de qualidade/formato — comum a todo keyframe verde. {avatar}, {ambiente}
 // e {moldura} entram aqui; o requisito do chroma é inegociável (recorte perfeito).
+//
+// A direção de fotografia é EXPLÍCITA (câmera, luz nomeada, color grade): sem
+// isso o modelo decidia sozinho e cada job saía com uma cara — "warm cozy
+// lighting" não é um esquema de luz, é um palpite.
 function styleBlock({ avatar, ambiente, moldura }) {
-  return `Photorealistic vertical 9:16 frame from a casual smartphone video (natural colors, warm cozy lighting, shallow depth of field). Clean full-bleed photo WITHOUT any camera interface overlay — no recording indicator, no buttons, no HUD, no watermark.
+  return `Photorealistic vertical 9:16 frame from a premium lifestyle commercial, shot on a full-frame mirrorless camera. Lighting scheme: one large soft key from a window or wide practical source, gentle warm fill, subtle rim from ambient practicals — flattering, dimensional, no harsh shadows on the face. Color grade of a high-end home-decor campaign: natural skin tones, warm highlights, clean deep shadows, rich but never oversaturated color.
 Setting: ${ambiente}.
-Subject: ${avatar} — see per-shot pose below.
-The product: a VERY LARGE vertical poster frame, about 1 meter tall, with ${moldura}.
-CRITICAL REQUIREMENT: the entire artwork area inside the moulding is a SOLID, FLAT, UNIFORM BRIGHT CHROMA-KEY GREEN (#00FF00) — perfectly even pure green from edge to edge, like a professional green screen. NO reflections, NO gradient, NO texture, NO glare and NO shadows on the green area. Only the ${moldura} around it.`;
+Subject: ${avatar} — see per-shot pose below. Body language is relaxed and genuinely proud, like someone showing a piece they love to a friend — never stiff, never stock-photo posed.
+The product: a VERY LARGE vertical poster frame, about 1 meter tall, with ${moldura}. The frame is the hero of the image.
+CRITICAL REQUIREMENT: the entire artwork area inside the moulding is a SOLID, FLAT, UNIFORM BRIGHT CHROMA-KEY GREEN (#00FF00) — perfectly even pure green from edge to edge, like a professional green screen. NO reflections, NO gradient, NO texture, NO glare and NO shadows on the green area. Only the ${moldura} around it.
+${IMG_GUARD}`;
 }
 
 // NUNCA escrever "she/her/the woman" aqui. O avatar é escolhido pelo usuário —
@@ -49,7 +63,8 @@ const MESMA_PESSOA =
   + 'same hair, same outfit, same hands) — never replace them with a different person';
 
 function sameBlock({ moldura }) {
-  return `Use the reference image for the identity of ${MESMA_PESSOA}, the same setting and the same large frame with ${moldura} and the flat chroma-key green (#00FF00) artwork area — keep the green perfectly solid, flat and uniform, no reflections.`;
+  return `Use the reference image for the identity of ${MESMA_PESSOA}, the same setting, the same lighting scheme and color grade, and the same large frame with ${moldura} and the flat chroma-key green (#00FF00) artwork area — keep the green perfectly solid, flat and uniform, no reflections.
+${IMG_GUARD}`;
 }
 
 // Os 6 shots FIXOS. Cada um recebe {avatar, ambiente, moldura} e devolve o
@@ -67,33 +82,37 @@ export function buildKeyframePrompts({ avatar, ambiente, moldura, molduraRef = f
 ${styleBlock({ avatar, ambiente, moldura })}`
     : styleBlock({ avatar, ambiente, moldura });
   const SAME = molduraRef
-    ? `First reference image: the identity of ${MESMA_PESSOA} and the same setting. LAST reference image: the EXACT picture-frame moulding — keep reproducing it faithfully on the large frame (same profile, material, finish, color and ornament). The frame keeps its flat chroma-key green (#00FF00) artwork area — perfectly solid, flat and uniform, no reflections.`
+    ? `First reference image: the identity of ${MESMA_PESSOA}, the same setting, lighting scheme and color grade. LAST reference image: the EXACT picture-frame moulding — keep reproducing it faithfully on the large frame (same profile, material, finish, color and ornament). The frame keeps its flat chroma-key green (#00FF00) artwork area — perfectly solid, flat and uniform, no reflections.
+${IMG_GUARD}`
     : sameBlock({ moldura });
+  // Cada shot tem LENTE e MICROEXPRESSÃO próprias. Antes era "soft smile" em
+  // 4 dos 6 — sorriso de banco de imagem. A sequência agora conta uma emoção:
+  // orgulho → conexão → cuidado → cumplicidade → contemplação → objeto.
   return {
     K1: {
       master: true,
       prompt: `${STYLE}
-Shot: full-body wide shot. The person stands in the middle of the place holding the large frame half-turned (about 45 degrees from camera), as if just turning it around to present it. The green surface is partially visible in perspective. They look at the frame with a soft smile.`,
+Shot: full-body wide shot, 24mm equivalent, camera at chest height, generous headroom. The person stands in the middle of the place holding the large frame half-turned (about 45 degrees from camera), caught mid-turn as if just presenting it. The green surface is partially visible in perspective. Micro-expression: eyes on the frame with quiet, genuine pride — the moment before showing something you love.`,
     },
     K2: {
       prompt: `${SAME}
-New shot: medium frontal shot. The large green-screen frame now faces the camera straight on, filling most of the lower 2/3 of the image. Their head and shoulders appear above the top edge of the frame, smiling warmly at the camera, hands gripping the sides of the frame. Background softly blurred.`,
+New shot: medium frontal shot, 35mm equivalent at eye level. The large green-screen frame now faces the camera straight on, filling most of the lower 2/3 of the image. Their head and shoulders appear above the top edge of the frame, hands gripping the sides. Micro-expression: warm, direct eye contact with an easy confident smile — sharing, not selling. Background softly blurred with creamy bokeh.`,
     },
     K3: {
       prompt: `${SAME}
-New shot: close-up on the frame itself. The flat green surface and the ${moldura} fill almost the whole image, slightly angled in gentle perspective. One of their hands holds the left edge. Warm lights in the blurry background.`,
+New shot: close-up on the frame itself, 50mm equivalent, shallow depth of field. The flat green surface and the ${moldura} fill almost the whole image, slightly angled in gentle perspective so the moulding profile catches the light. One of their hands rests lightly on the left edge, fingertips relaxed — the touch of someone handling a piece with care. Warm practical lights melt into the blurry background.`,
     },
     K4: {
       prompt: `${SAME}
-New shot: close frontal shot. ${MESMA_PESSOA} stands BEHIND the large frame: only their head is visible above the top edge, chin slightly down, looking at the camera with a soft smile, both hands resting flat on the top edge of the moulding. Background softly blurred.`,
+New shot: close frontal shot, 50mm equivalent. ${MESMA_PESSOA} stands BEHIND the large frame: only their head is visible above the top edge, chin slightly down, both hands resting flat on the top edge of the moulding. Micro-expression: playful, relaxed peek over the frame — a hint of a genuine smile reaching the eyes. Background softly blurred.`,
     },
     K5: {
       prompt: `${SAME}
-New shot: wide shot of a different corner of the same place. The large green-screen frame now HANGS on a clean white gallery wall with a small black picture light mounted above it. The person stands to the side, seen from behind in three-quarter view, admiring the framed green surface on the wall. Ambience around.`,
+New shot: wide shot of a different corner of the same place, 35mm equivalent. The large green-screen frame now HANGS on a clean white gallery wall with a small black picture light mounted above it, perfectly level. The person stands to the side, seen from behind in three-quarter view, quietly admiring the framed green surface on the wall — weight on one leg, at ease, contemplative. Soft ambient depth around.`,
     },
     K6: {
       prompt: `${SAME}
-New shot: no people. The large green-screen frame hanging on the clean white gallery wall with the black picture light above it, seen from a 30-degree side angle with gentle perspective, background softly blurred. Elegant gallery mood.`,
+New shot: no people. The large green-screen frame hanging on the clean white gallery wall with the black picture light above it casting a soft wash down the wall, seen from a 30-degree side angle with gentle perspective, 50mm equivalent. Background softly blurred. Elegant, quiet gallery mood — the product standing on its own.`,
     },
   };
 }
@@ -104,6 +123,15 @@ const STATIC_ART =
   'The artwork inside the moulding is a STATIC physical painting — it stays ' +
   'EXACTLY as in the reference image, rigid and unchanged, moving only together ' +
   'with the frame as one solid object; nothing inside the picture moves or morphs.';
+
+// negativePrompt NATIVO do Veo 3.1 — vai em parameters, não no texto. Lista o
+// que derruba um anúncio: deformação da arte/moldura, mão errada, texto na
+// tela, e os tiques de vídeo gerado (jump cut, zoom brusco, flicker).
+export const VEO_NEGATIVE =
+  'cartoon, painting-style rendering, morphing or warping artwork, frame bending, '
+  + 'extra fingers, deformed hands, face distortion, identity change, on-screen text, '
+  + 'captions, subtitles, watermark, logo, jump cut, sudden zoom, camera shake, '
+  + 'flickering, oversaturation, people walking through the frame';
 
 // Intensidade de movimento por cenário/mockup. "calmo" segura a câmera,
 // "dinamico" empurra mais (mas nunca exagera — o Veo já tende a exagerar o fim).

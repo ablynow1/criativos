@@ -18,6 +18,10 @@ export const config = {
   // em jul/2026 e passou a devolver 404 em toda geração de imagem do estúdio.
   imageModel: process.env.IMAGE_MODEL || 'gemini-3-pro-image',
   imageLocation: process.env.IMAGE_LOCATION || 'global',
+  // '2K' dobra a resolução de saída pelo MESMO preço do default 1K (1120
+  // tokens de output nos dois; só o 4K custa mais). Sem isso o keyframe sai
+  // 768x1376 e o Veo upscala soft pra 1080p.
+  imageSize: process.env.IMAGE_SIZE || '2K',
   ttsVoiceName: process.env.TTS_VOICE_NAME || 'pt-BR-Neural2-C',
   ttsLanguageCode: process.env.TTS_LANGUAGE_CODE || 'pt-BR',
 };

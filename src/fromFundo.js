@@ -4,6 +4,7 @@ import path from 'node:path';
 import { getFundo } from './fundos.js';
 import { generateProductImage } from './generateProductImage.js';
 import { generateVideoClip } from './generateVideoClip.js';
+import { VEO_NEGATIVE } from './cenarios.js';
 
 /**
  * Motor de FUNDO do modo ERMOS: ativa um lugar da biblioteca gerando o VÍDEO
@@ -71,6 +72,7 @@ async function main() {
     resolution: '1080p',
     durationSeconds: 8,
     ambiente: true,
+    negativePrompt: VEO_NEGATIVE,
   }), 'veo', 3);
 
   console.log(`OK fundo "${preset.nome}" — ${vidPath}`);

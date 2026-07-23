@@ -243,8 +243,26 @@ def main():
         tilt = float(np.clip(1.0 - TILT_DIM * (1.0 - aspects[kid] / ref_aspect),
                              1.0 - TILT_DIM, 1.0))
         base = lamp_art if lamp else art_fit
-        Hm = cv2.getPerspectiveTransform(src, q.astype(np.float32))
-        warped = cv2.warpPerspective(base, Hm, (W, Hh), flags=cv2.INTER_LINEAR)
+        # PRE-DOWNSCALE com INTER_AREA antes do warp. A arte tem ~1400-2000px
+        # e o quad ~300-900px: warpPerspective INTER_LINEAR le so' 2x2 vizinhos
+        # e joga o resto fora — decimacao pontual = aliasing/moire em linha
+        # fina, que o Veo depois AMPLIFICA ao animar. Reduzir por area primeiro
+        # (filtro correto pra encolher) e warpar ja' perto do tamanho final
+        # mata o artefato na origem. Margem de 1.3x preserva nitidez no warp.
+        lado_quad = max(
+            np.linalg.norm(q[0] - q[1]), np.linalg.norm(q[1] - q[2]),
+            np.linalg.norm(q[2] - q[3]), np.linalg.norm(q[3] - q[0]))
+        bh, bw = base.shape[:2]
+        escala = min(1.0, (lado_quad * 1.3) / max(bh, bw))
+        if escala < 0.95:
+            base_w = cv2.resize(base, (max(2, int(bw * escala)), max(2, int(bh * escala))),
+                                interpolation=cv2.INTER_AREA)
+        else:
+            base_w = base
+        wh, ww = base_w.shape[:2]
+        src_w = np.array([[0, 0], [ww, 0], [ww, wh], [0, wh]], dtype=np.float32)
+        Hm = cv2.getPerspectiveTransform(src_w, q.astype(np.float32))
+        warped = cv2.warpPerspective(base_w, Hm, (W, Hh), flags=cv2.INTER_LINEAR)
         if tilt < 0.998:
             warped = np.clip(warped.astype(np.float32) * tilt, 0, 255).astype(np.uint8)
 

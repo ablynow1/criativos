@@ -211,6 +211,36 @@ lugar; o `?v=` no fim do caminho é o que faz o navegador largar a antiga.
 **K1 fica de fora de propósito** — é a raiz da identidade das outras cinco.
 Se ele estiver errado, o certo é refazer o cenário inteiro.
 
+## 5.8 Motor de qualidade (padrões que não podem regredir)
+
+- **Imagem sai em 2K** (`imageSize` no `imageConfig`) — 1K e 2K custam os
+  MESMOS 1120 tokens; sem o campo, o modelo devolve 1K (768×1376) e o Veo
+  upscala soft. `IMAGE_SIZE` no env muda.
+- **Bloqueio RAI de imagem é fail-fast** (`e.code IMG_RAI_BLOCKED` via
+  `finishReason`) — retentar bloqueio de política queima render à toa.
+- **Veo**: `negativePrompt` (VEO_NEGATIVE do cenarios.js) e
+  `compressionQuality: 'lossless'` em todo clipe — o master ainda passa por
+  x264 na montagem, sair 'optimized' era compressão em cascata. Vídeo bom com
+  amostra filtrada pelo RAI é ACEITO (resposta parcial), não jogado fora.
+- **24fps de ponta a ponta** — o Veo só gera 24; forçar 30 duplicava 1 frame
+  a cada 4 (stutter visível em movimento de câmera).
+- **Paralelismo com limiter compartilhado** (`src/limiter.js`): K2..K6 em
+  paralelo (pool 3, derivam só de K1), clipes Veo em pool deslizante (pool 3),
+  2 palcos simultâneos na produção em massa. O cooldown de 429 é GLOBAL — uma
+  chamada esfriou, todas esperam juntas. Knobs: `IMG_CONCURRENCY`,
+  `VEO_CONCURRENCY`, `PALCOS_CONCURRENCY`.
+- **Arte pre-downscaled com INTER_AREA antes do warp** (art-keyframes) — warp
+  direto de 2000px pra quad de ~400px era decimação pontual: aliasing que o
+  Veo amplifica ao animar.
+- **Ermos renderiza em 1440×2560** (recomendação do Meta pra Reels ads; croma
+  4:2:0 sobe de 540 pra 720px). Toda a geometria deriva de `px()` sobre os
+  valores aprovados em 1080 — os números de referência não mudam.
+- **Encode**: intermediários em CRF 14 veryfast (não acumular perda
+  geracional); ENTREGA em CRF 16 preset slow (é a fonte que o IG re-encoda).
+- **Prompts com direção de fotografia real** (luz nomeada, lente por shot,
+  color grade, microexpressão por cena) + `IMG_GUARD` anti-artefato em todo
+  keyframe. O Nano Banana não tem negativePrompt — exclusão vai no corpo.
+
 ## 6. Como adicionar um cenário novo
 
 1. Descreve avatar + ambiente + moldura (texto livre).

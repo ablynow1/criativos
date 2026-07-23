@@ -2,12 +2,16 @@ import { readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { buildVeoPrompts, buildSegments } from './cenarios.js';
+import { buildVeoPrompts, buildSegments, VEO_NEGATIVE } from './cenarios.js';
 import { generateVideoClip } from './generateVideoClip.js';
 import { generateNarration } from './generateNarration.js';
 import { generateSubtitles } from './generateSubtitles.js';
 import { generateMusic } from './musicGen.js';
 import { baixaTrilhaYoutube } from './trilhaYoutube.js';
+import { makeLimiter } from './limiter.js';
+
+// quota do Veo costuma ser poucas operações simultâneas — degrada pra fila no 429
+const veoLimiter = makeLimiter({ max: Math.max(1, Number(process.env.VEO_CONCURRENCY || 3)) });
 import { variarNarracao } from './variarNarracao.js';
 import { mergeFinal } from './mergeFinal.js';
 import { runFfmpeg, getDurationSeconds } from './ffmpeg.js';
@@ -109,31 +113,32 @@ async function main() {
       prompt: veo[id].prompt,
       outputPath: path.join(clipsDir, `${id}.mp4`),
       aspectRatio: '9:16', resolution: '1080p', durationSeconds: 8, ambiente: true,
+      negativePrompt: VEO_NEGATIVE,
     });
   };
-  // 1ª passada em lotes de 3
-  let pendentes = [...usados];
+  // POOL DESLIZANTE em vez de lote-comboio: no lote de 3, o lote inteiro
+  // esperava o clipe mais lento antes de abrir as próximas vagas — e o Veo
+  // varia de 1 a 3min por clipe. Aqui, terminou um, entra o próximo.
+  // O polling é I/O puro (10s de sleep por rodada), então 3 em voo não pesa
+  // no Mac; a cota é do limiter.
   const falhou = [];
-  for (let i = 0; i < pendentes.length; i += 3) {
-    const lote = pendentes.slice(i, i + 3);
-    lote.forEach((id) => console.log(`  → ${id} (a partir de ${veo[id].kf})`));
-    const res = await Promise.allSettled(lote.map((id) => genClip(id)));
-    res.forEach((r, j) => {
-      if (r.status === 'rejected') {
-        falhou.push(lote[j]);
-        console.error(`  FALHOU ${lote[j]}: ${String(r.reason?.message).slice(0, 120)}`);
-      }
-    });
-  }
+  await Promise.all(usados.map((id) => veoLimiter.run(async () => {
+    console.log(`  → ${id} (a partir de ${veo[id].kf})`);
+    try { await genClip(id); }
+    catch (e) {
+      falhou.push(id);
+      console.error(`  FALHOU ${id}: ${String(e.message).slice(0, 120)}`);
+    }
+  })));
   // RETRY: o RAI do Veo é estocástico — a mesma imagem passa numa 2ª/3ª tentativa
-  // (foi o que resolveu o pastor na mão). Retenta cada cena caída, 1 por vez.
+  // (foi o que resolveu o pastor na mão). Retenta as caídas, também em pool.
   for (let tent = 1; tent <= 2 && falhou.length; tent += 1) {
     const retry = falhou.splice(0, falhou.length);
     console.log(`  retry ${tent}/2 de: ${retry.join(' ')}`);
-    for (const id of retry) {
+    await Promise.all(retry.map((id) => veoLimiter.run(async () => {
       try { await genClip(id); console.log(`  ✓ ${id} passou na retentativa`); }
       catch (e) { falhou.push(id); console.error(`  ainda falhou ${id}: ${String(e.message).slice(0, 100)}`); }
-    }
+    })));
   }
   if (usaAbertura) await copyFile(aberturaClip, path.join(clipsDir, 'ABERTURA.mp4'));
 
@@ -161,8 +166,10 @@ async function main() {
     // -ss ANTES do -i = seek rápido; corta + escala + reencoda (curto, veryfast)
     await runFfmpeg([
       '-ss', String(tin), '-i', inClip, '-t', dur,
-      '-vf', 'fps=30,scale=1080:1920,setsar=1',
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      // o Veo só gera 24fps — forçar 30 duplicava 1 frame a cada 4 (stutter visível
+      // nos movimentos de câmera). 24 constante = movimento limpo de ponta a ponta.
+      '-vf', 'fps=24,scale=1080:1920,setsar=1',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart',
       segOut,
     ]);
@@ -272,7 +279,7 @@ async function main() {
     await runFfmpeg([
       '-i', outputPath,
       '-vf', 'crop=1080:1350:0:285',
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p',
       '-c:a', 'copy', '-movflags', '+faststart',
       out45,
     ]);

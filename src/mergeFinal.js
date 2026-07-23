@@ -121,7 +121,8 @@ export async function mergeFinal({
     ...args,
     '-filter_complex', fc.join(';'),
     '-map', '[vout]', '-map', '[aout]',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p',
+    // entrega final: fonte limpa pro re-encode do IG (slow/16 ≈ +30s de CPU, vale)
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
     '-movflags', '+faststart',
     '-t', String(videoDuration),

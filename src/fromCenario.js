@@ -7,6 +7,10 @@ import { buildKeyframePrompts } from './cenarios.js';
 import { describeMoldura } from './describeMoldura.js';
 import { generateProductImage } from './generateProductImage.js';
 import { img2img } from './img2img.js';
+import { makeLimiter } from './limiter.js';
+
+// teto GLOBAL de chamadas de imagem em voo (vale pros 2 palcos somados)
+const imgLimiter = makeLimiter({ max: Math.max(1, Number(process.env.IMG_CONCURRENCY || 3)) });
 
 /**
  * Motor de CENÁRIO (o "palco") do Estúdio de Quadros.
@@ -58,6 +62,8 @@ async function genKeyframe(fn, label) {
       return;
     } catch (err) {
       lastErr = err;
+      // bloqueio de política é determinístico: retentar queima render à toa
+      if (err.code === 'IMG_RAI_BLOCKED') throw err;
       const is429 = /429|RESOURCE_EXHAUSTED|exhausted|quota/i.test(err.message || '');
       const waitMs = is429 ? attempt * 20000 : 2000;
       console.error(`  ${label} tentativa ${attempt} falhou${is429 ? ' (cota 429)' : ''}: ${String(err.message).slice(0, 140)}`);
@@ -99,10 +105,13 @@ async function gerarPalco({ persona, outDir, molduraImg, molduraRef, movimento, 
   );
   if (!existsSync(k1Path)) throw new Error('K1 não foi gerado');
 
-  for (let i = 1; i < ids.length; i += 1) {
-    const id = ids[i];
-    console.log(`${marker(i + 1)} gerando ${id} (img2img de K1${moldLocal ? '+moldura' : ''})…`);
-    await genKeyframe(
+  // K2..K6 derivam SÓ de K1 — a ordem entre eles é irrelevante e a
+  // serialização era artificial: mais da metade do tempo de um palco era
+  // espera em fila de um por vez. O limiter global segura a cota (429).
+  const resto = ids.slice(1);
+  console.log(`${marker(2)} gerando ${resto.join(', ')} em paralelo (img2img de K1${moldLocal ? '+moldura' : ''})…`);
+  const rs = await Promise.allSettled(resto.map((id) =>
+    imgLimiter.run(() => genKeyframe(
       () => img2img({
         inputPaths: moldLocal ? [k1Path, moldLocal] : [k1Path],
         prompt: prompts[id].prompt,
@@ -110,7 +119,10 @@ async function gerarPalco({ persona, outDir, molduraImg, molduraRef, movimento, 
         aspectRatio: '9:16',
       }),
       id,
-    );
+    ))));
+  const mortos = resto.filter((_, i) => rs[i].status === 'rejected');
+  if (mortos.length) {
+    throw new Error(`keyframes falharam: ${mortos.join(', ')} — ${rs.find((r) => r.status === 'rejected').reason.message}`);
   }
 
   const cenario = {
@@ -193,20 +205,27 @@ async function main() {
   personas.forEach((p, i) => console.log(`  P${i + 1}: ${p.nome}`));
   if (molduraDesc) personas.forEach((p) => { p.moldura = molduraDesc; });
 
+  // 2 palcos em voo, compartilhando o MESMO limiter de imagem: o teto de
+  // chamadas simultâneas continua o do limiter — o pool só elimina a espera
+  // serial de um palco inteiro atrás do outro.
   const falhas = [];
-  for (let i = 0; i < personas.length; i += 1) {
-    const outDir = `${outBase}-p${i + 1}`;
-    try {
-      await gerarPalco({
-        persona: personas[i], outDir, molduraImg,
-        movimento: cfg.movimento, temAbertura: cfg.temAbertura,
-        marker: (j) => `[P ${i + 1}/${personas.length} K ${j}/6]`,
-      });
-    } catch (e) {
-      falhas.push(personas[i].nome);
-      console.error(`  persona ${i + 1} falhou (seguindo): ${String(e.message).slice(0, 140)}`);
+  const filaPersonas = personas.map((p, i) => ({ p, i }));
+  const PALCOS_MAX = Math.max(1, Number(process.env.PALCOS_CONCURRENCY || 2));
+  await Promise.all(Array.from({ length: Math.min(PALCOS_MAX, filaPersonas.length) }, async () => {
+    for (let item = filaPersonas.shift(); item; item = filaPersonas.shift()) {
+      const outDir = `${outBase}-p${item.i + 1}`;
+      try {
+        await gerarPalco({
+          persona: item.p, outDir, molduraImg,
+          movimento: cfg.movimento, temAbertura: cfg.temAbertura,
+          marker: (j) => `[P ${item.i + 1}/${personas.length} K ${j}/6]`,
+        });
+      } catch (e) {
+        falhas.push(item.p.nome);
+        console.error(`  persona ${item.i + 1} falhou (seguindo): ${String(e.message).slice(0, 140)}`);
+      }
     }
-  }
+  }));
   if (falhas.length === personas.length) throw new Error('todas as personas falharam');
   if (falhas.length) console.log(`ATENÇÃO: ${falhas.length} persona(s) falharam: ${falhas.join(', ')}`);
   console.log(`OK ${personas.length - falhas.length}/${personas.length} palcos gerados`);

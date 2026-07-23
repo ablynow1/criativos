@@ -54,6 +54,7 @@ export async function generateVideoClip({
   resolution = '1080p',
   durationSeconds = 8,
   ambiente = true, // áudio nativo do Veo (som ambiente/SFX que casa com a cena)
+  negativePrompt = null, // o que NUNCA pode aparecer (campo nativo do Veo 3.1)
 }) {
   const accessToken = await getAccessToken();
   const supportedImage = await ensureSupportedImage(imagePath);
@@ -73,6 +74,10 @@ export async function generateVideoClip({
       durationSeconds,
       sampleCount: 1,
       generateAudio: ambiente !== false,
+      // o master ainda passa por um encode x264 na montagem — sair 'optimized'
+      // do Veo era compressão em cascata (banding nos céus e nas paredes lisas)
+      compressionQuality: process.env.VEO_COMPRESSION || 'lossless',
+      ...(negativePrompt ? { negativePrompt } : {}),
     },
   });
 
@@ -81,12 +86,28 @@ export async function generateVideoClip({
     throw new Error(`Resposta inesperada da Vertex AI: ${JSON.stringify(startRes)}`);
   }
 
+  // deadline + tolerância a erro transitório de POLLING: uma falha de rede na
+  // consulta do status não pode matar um render que está rodando lá no Google
+  const deadline = Date.now() + Number(process.env.VEO_TIMEOUT_MS || 12 * 60_000);
+  let pollErrs = 0;
   let operation = { done: false };
   while (!operation.done) {
+    if (Date.now() > deadline) {
+      const e = new Error(`Veo estourou o tempo de espera (${operationName})`);
+      e.code = 'VEO_TIMEOUT';
+      throw e;
+    }
     await new Promise((r) => setTimeout(r, 10_000));
-    operation = await vertexFetch(`${modelPath()}:fetchPredictOperation`, accessToken, {
-      operationName,
-    });
+    try {
+      operation = await vertexFetch(`${modelPath()}:fetchPredictOperation`, accessToken, {
+        operationName,
+      });
+      pollErrs = 0;
+    } catch (e) {
+      pollErrs += 1;
+      if (pollErrs >= 3) throw e;   // 3 consultas seguidas falhando = problema real
+      console.error(`  polling falhou (${pollErrs}/3), tentando de novo: ${String(e.message).slice(0, 100)}`);
+    }
   }
 
   if (operation.error) {
@@ -101,8 +122,13 @@ export async function generateVideoClip({
     throw err;
   }
 
-  // Filtro de segurança (RAI) do Veo bloqueou a geração — erro com código pro fallback.
-  if (operation.response?.raiMediaFilteredCount > 0) {
+  // RESPOSTA PARCIAL: extrai o vídeo ANTES de olhar o filtro. O RAI conta
+  // amostras filtradas — se veio vídeo E o contador > 0, temos um vídeo BOM
+  // que antes era jogado fora junto com a amostra ruim.
+  const prediction = operation.response?.predictions?.[0] || operation.response?.videos?.[0];
+  const videoBase64 = prediction?.bytesBase64Encoded;
+
+  if (!videoBase64 && operation.response?.raiMediaFilteredCount > 0) {
     const motivo = (operation.response.raiMediaFilteredReasons || []).join(' ');
     const err = new Error(
       `Veo BLOQUEOU o vídeo pelo filtro de conteúdo do Google (política de segurança). ` +
@@ -111,11 +137,11 @@ export async function generateVideoClip({
     err.code = 'VEO_RAI_BLOCKED';
     throw err;
   }
-
-  const prediction = operation.response?.predictions?.[0] || operation.response?.videos?.[0];
-  const videoBase64 = prediction?.bytesBase64Encoded;
   if (!videoBase64) {
     throw new Error(`Nenhum vídeo retornado pelo Veo: ${JSON.stringify(operation.response).slice(0, 300)}`);
+  }
+  if (operation.response?.raiMediaFilteredCount > 0) {
+    console.error('  (RAI filtrou uma amostra, mas veio vídeo válido — seguindo com ele)');
   }
 
   await writeFile(outputPath, Buffer.from(videoBase64, 'base64'));

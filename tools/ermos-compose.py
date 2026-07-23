@@ -49,7 +49,8 @@ def painel(arte, largura, altura):
     ah, aw = arte.shape[:2]
     k = max(largura / aw, altura / ah)          # cobre (nao cabe): sem margem
     nw, nh = max(largura, int(round(aw * k))), max(altura, int(round(ah * k)))
-    grande = cv2.resize(arte, (nw, nh), interpolation=cv2.INTER_AREA)
+    interp = cv2.INTER_AREA if (nw < aw or nh < ah) else cv2.INTER_LANCZOS4
+    grande = cv2.resize(arte, (nw, nh), interpolation=interp)
     x0, y0 = (nw - largura) // 2, (nh - altura) // 2
     return grande[y0:y0 + altura, x0:x0 + largura]
 
@@ -131,7 +132,9 @@ def moldura_asset(arte, nome, largura, aspect):
     bgra = cv2.cvtColor(comp, cv2.COLOR_BGR2BGRA)
     bgra[..., 3] = alpha_out
     alt = int(largura / aspect)
-    return cv2.resize(bgra, (largura, alt), interpolation=cv2.INTER_AREA)
+    # INTER_AREA amplia mal (borra) — so' vale pra encolher; ampliando, LANCZOS4
+    interp = cv2.INTER_AREA if largura < bgra.shape[1] else cv2.INTER_LANCZOS4
+    return cv2.resize(bgra, (largura, alt), interpolation=interp)
 
 
 def com_sombra(bgra):

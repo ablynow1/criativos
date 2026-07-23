@@ -1,7 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { imageModelUrl } from './config.js';
+import { config, imageModelUrl } from './config.js';
 import { getAccessToken } from './googleAuth.js';
+import { extraiImagem } from './generateProductImage.js';
 
 function mimeOf(p) {
   const e = path.extname(p).toLowerCase();
@@ -33,7 +34,7 @@ export async function img2img({ inputPaths, prompt, outputPath, aspectRatio = '3
       contents: [{ role: 'user', parts: [...imageParts, { text: prompt }] }],
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
-        imageConfig: { aspectRatio },
+        imageConfig: { aspectRatio, imageSize: config.imageSize },
       },
     }),
   });
@@ -41,12 +42,7 @@ export async function img2img({ inputPaths, prompt, outputPath, aspectRatio = '3
   if (!res.ok) {
     throw new Error(`img2img ${res.status}: ${await res.text()}`);
   }
-  const data = await res.json();
-  const parts = data.candidates?.[0]?.content?.parts || [];
-  const imagePart = parts.find((p) => p.inlineData?.data);
-  if (!imagePart) {
-    throw new Error(`Nenhuma imagem retornada: ${JSON.stringify(data).slice(0, 500)}`);
-  }
+  const imagePart = extraiImagem(await res.json(), 'img2img');
   await writeFile(outputPath, Buffer.from(imagePart.inlineData.data, 'base64'));
   return outputPath;
 }
