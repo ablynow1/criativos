@@ -378,8 +378,12 @@ function fmtT(s) {
 
 function viewYoutube() {
   const Y = S.yt;
-  // a janela da música é a duração do vídeo do formato que ele está montando
-  const dur = S.mk.formato === 'ermos' ? S.mk.duracaoErmos : S.mk.duracaoAlvo;
+  // esta tela serve os DOIS destinos: o formulário novo e o "refazer" de um
+  // criativo pronto. O trecho é cortado na duração do vídeo de destino.
+  const paraRefazer = Y.destino === 'refazer' && S.refazer;
+  const jobRf = paraRefazer ? S.jobs.find((x) => x.id === S.refazer.id) : null;
+  const dur = paraRefazer ? (jobRf?.snapshot?.duracao || 8)
+    : (S.mk.formato === 'ermos' ? S.mk.duracaoErmos : S.mk.duracaoAlvo);
   const cells = Y.videos.map((v, i) => `
     <div class="yt-item ${Y.sel && Y.sel.id === v.id ? 'sel' : ''}" data-ytv="${i}">
       <img src="${esc(v.thumb)}" alt="" loading="lazy">
@@ -408,7 +412,10 @@ function viewYoutube() {
   `);
   let t;
   $('#yt-q').oninput = (e) => { Y.busca = e.target.value; clearTimeout(t); t = setTimeout(() => buscaYt(), 500); };
-  $('#yt-voltar').onclick = () => { S.screen = null; render(); };
+  $('#yt-voltar').onclick = () => {
+    if (paraRefazer) { Y.destino = null; S.tab = 'fila'; }  // veio da Fila, volta pra Fila
+    S.screen = null; render();
+  };
   app.querySelectorAll('[data-ytv]').forEach((el) => el.onclick = () => {
     Y.sel = Y.videos[+el.dataset.ytv]; Y.inicio = 0; render();
   });
@@ -439,8 +446,11 @@ function viewYoutube() {
       toast(`ouvindo ${fmtT(Y.inicio)} → ${fmtT(Y.inicio + dur)}`);
     };
     $('#yt-ok').onclick = () => {
-      S.mk.ytId = Y.sel.id; S.mk.ytTitulo = Y.sel.titulo; S.mk.ytInicio = Y.inicio;
-      S.mk.musica = 'nenhuma'; // a trilha do YouTube substitui o mood gerado
+      const alvo = paraRefazer ? S.refazer : S.mk;
+      alvo.ytId = Y.sel.id; alvo.ytTitulo = Y.sel.titulo; alvo.ytInicio = Y.inicio;
+      alvo.musica = 'nenhuma'; // a trilha do YouTube substitui o mood gerado
+      // volta pra onde ele estava: a Fila (com o painel aberto) ou o formulário
+      if (paraRefazer) { Y.destino = null; S.tab = 'fila'; }
       S.screen = null; render(); toast('trilha escolhida ✓');
     };
   }
@@ -1202,7 +1212,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
         ritmo: m.ritmo, duracao: m.duracaoErmos, legenda: m.legendaErmos.trim(),
         pelicula: m.pelicula || 'nenhuma', peliculaOp: m.peliculaOp ?? 0.3,
         logoUrl: m.logoUrl, semLogo: !!m.semLogo, musica: m.musica,
-        ytId: m.ytId, ytInicio: m.ytInicio,
+        ytId: m.ytId, ytTitulo: m.ytTitulo, ytInicio: m.ytInicio,
         formatos: m.fmt45 ? ['9:16', '4:5'] : ['9:16'], nome: '',
       } });
       m.artes = [];
@@ -1304,15 +1314,28 @@ function refazerHtml(j) {
     chipMoldura(id, nome, R.moldura === id, 'data-rf-mol')).join('');
   const lugBtns = prontos.map((f) =>
     `<button class="chip ${R.fundoIds.includes(f.id) ? 'on' : ''}" data-rf-fun="${esc(f.id)}">${esc(f.nome)}</button>`).join('');
+  const triBtns = TRILHAS.map((t) =>
+    `<button class="chip ${!R.ytId && R.musica === t ? 'on' : ''}" data-rf-tri="${t}">${t}</button>`).join('');
   const mudou = R.moldura !== R.origMoldura || R.fundoIds.join() !== R.origFundos.join()
-    || R.pelicula !== R.origPel || (R.pelicula !== 'nenhuma' && R.peliculaOp !== R.origPelOp);
+    || R.pelicula !== R.origPel || (R.pelicula !== 'nenhuma' && R.peliculaOp !== R.origPelOp)
+    || R.ytId !== R.origYtId || R.ytInicio !== R.origYtInicio || R.musica !== R.origMusica;
   return `<div class="refazer">
     <div class="field"><label>Moldura</label><div class="chips">${molBtns}</div></div>
     <div class="field"><label>Lugar${R.fundoIds.length > 1 ? ' (troca durante o vídeo)' : ''}</label>
       <div class="chips">${lugBtns || '<span class="hint">nenhum lugar ativado ainda</span>'}</div></div>
     ${peliculaHtml(R, 'rf')}
-    <div class="hint">As mesmas ${(j.snapshot?.arteUrls || []).length} artes, mesmo ritmo, mesma trilha.</div>
-    <button class="btn sm" id="rf-go" ${mudou ? '' : 'disabled'}>${mudou ? 'Refazer com estas mudanças' : 'mude a moldura ou o lugar'}</button>
+    <div class="field"><label>Trilha</label>
+      <div class="chips">${triBtns}
+        <button class="chip ${R.ytId ? 'on' : ''}" data-rf-yt="1">▶ do YouTube</button></div>
+      ${R.ytId ? `<div class="yt-sel">
+        <img src="https://i.ytimg.com/vi/${esc(R.ytId)}/mqdefault.jpg" alt="">
+        <div class="yt-info"><b>${esc(R.ytTitulo || R.ytId)}</b>
+          <span>começa em <b>${fmtT(R.ytInicio || 0)}</b> · pega ${j.snapshot?.duracao || 8}s</span></div>
+        <button class="btn sm ghost" data-rf-yt="1">trocar</button>
+      </div>` : ''}
+    </div>
+    <div class="hint">As mesmas ${(j.snapshot?.arteUrls || []).length} artes, mesmo ritmo, mesma duração.</div>
+    <button class="btn sm" id="rf-go" ${mudou ? '' : 'disabled'}>${mudou ? 'Refazer com estas mudanças' : 'mude a moldura, o lugar ou a trilha'}</button>
   </div>`;
 }
 
@@ -1434,10 +1457,13 @@ function viewFila() {
     const s = j.snapshot || {};
     const pel = s.pelicula || 'nenhuma';
     const pelOp = s.peliculaOp ?? 0.3;
+    const mus = s.musica || 'nenhuma';
     S.refazer = { id, moldura: s.moldura, fundoIds: [...(s.fundoIds || [])],
       pelicula: pel, peliculaOp: pelOp,
+      musica: mus, ytId: s.ytId || null, ytTitulo: s.ytTitulo || '', ytInicio: s.ytInicio || 0,
       origMoldura: s.moldura, origFundos: [...(s.fundoIds || [])],
-      origPel: pel, origPelOp: pelOp };
+      origPel: pel, origPelOp: pelOp,
+      origMusica: mus, origYtId: s.ytId || null, origYtInicio: s.ytInicio || 0 };
     render();
   });
   // arrastar a opacidade não re-renderiza (perderia o arrasto), então o botão
@@ -1447,6 +1473,18 @@ function viewFila() {
     if (g) { g.disabled = false; g.textContent = 'Refazer com estas mudanças'; }
   });
   app.querySelectorAll('[data-rf-mol]').forEach((b) => b.onclick = () => { S.refazer.moldura = b.dataset.rfMol; render(); });
+  app.querySelectorAll('[data-rf-tri]').forEach((b) => b.onclick = () => {
+    S.refazer.musica = b.dataset.rfTri;
+    S.refazer.ytId = null; S.refazer.ytTitulo = '';   // um OU outro, nunca os dois
+    render();
+  });
+  // a tela do YouTube é a mesma do formulário novo — o destino diz onde gravar
+  app.querySelectorAll('[data-rf-yt]').forEach((b) => b.onclick = () => {
+    S.yt.destino = 'refazer';
+    S.yt.sel = S.refazer.ytId ? { id: S.refazer.ytId, titulo: S.refazer.ytTitulo, dur: 600 } : S.yt.sel;
+    S.yt.inicio = S.refazer.ytInicio || 0;
+    S.screen = 'youtube'; render();
+  });
   app.querySelectorAll('[data-rf-fun]').forEach((b) => b.onclick = () => {
     const F = S.refazer.fundoIds; const i = F.indexOf(b.dataset.rfFun);
     if (i >= 0) { if (F.length === 1) return toast('deixe ao menos um lugar', true); F.splice(i, 1); }
@@ -1459,7 +1497,8 @@ function viewFila() {
     rf.disabled = true; rf.textContent = 'enfileirando…';
     try {
       const r = await api('requeue_ermos', { body: { id: R.id, moldura: R.moldura, fundoIds: R.fundoIds,
-        pelicula: R.pelicula, peliculaOp: R.peliculaOp } });
+        pelicula: R.pelicula, peliculaOp: R.peliculaOp,
+        musica: R.musica, ytId: R.ytId, ytTitulo: R.ytTitulo, ytInicio: R.ytInicio } });
       S.refazer = null; await refresh();
       toast(`refazendo com ${r.mudou.join(' + ')} ↻`);
     } catch (e) { toast(e.message, true); render(); }

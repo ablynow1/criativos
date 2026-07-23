@@ -192,6 +192,9 @@ if ($action === 'queue_ermos') {
             'semLogo' => !empty($b['semLogo']),
             'musica' => $b['musica'] ?? 'nenhuma',
             'ytId' => preg_match('/^[\w-]{11}$/', $b['ytId'] ?? '') ? $b['ytId'] : null,
+            // o título é só pra UI (o painel de refazer mostra qual música é —
+            // sem ele apareceria o ID cru do YouTube)
+            'ytTitulo' => mb_substr(trim((string)($b['ytTitulo'] ?? '')), 0, 120),
             'ytInicio' => max(0, (int)($b['ytInicio'] ?? 0)),
             'formatos' => (!empty($b['formatos']) && is_array($b['formatos'])) ? $b['formatos'] : ['9:16'],
         ],
@@ -222,6 +225,21 @@ if ($action === 'requeue_ermos') {
         if (!in_array($moldura, ['preto', 'branco', 'marfim', 'arabesco'], true)) fail('moldura inválida');
         $snap['moldura'] = $moldura;
         $mudou[] = 'moldura ' . $moldura;
+    }
+    // trilha: YouTube OU mood gerado, nunca os dois
+    if (array_key_exists('musica', $b) || array_key_exists('ytId', $b)) {
+        $yt = preg_match('/^[\w-]{11}$/', (string)($b['ytId'] ?? '')) ? $b['ytId'] : null;
+        $mus = $yt ? 'nenhuma' : (string)($b['musica'] ?? 'nenhuma');
+        $ini = max(0, (int)($b['ytInicio'] ?? 0));
+        $antesYt = $snap['ytId'] ?? null;
+        if ($yt !== $antesYt || $mus !== ($snap['musica'] ?? 'nenhuma')
+            || ($yt && $ini !== (int)($snap['ytInicio'] ?? 0))) {
+            $snap['ytId'] = $yt;
+            $snap['ytTitulo'] = $yt ? mb_substr(trim((string)($b['ytTitulo'] ?? '')), 0, 120) : '';
+            $snap['ytInicio'] = $ini;
+            $snap['musica'] = $mus;
+            $mudou[] = $yt ? 'trilha do YouTube' : ($mus === 'nenhuma' ? 'sem trilha' : "trilha $mus");
+        }
     }
     if (array_key_exists('pelicula', $b)) {
         $pel = in_array($b['pelicula'], ['preta', 'branca'], true) ? $b['pelicula'] : 'nenhuma';
