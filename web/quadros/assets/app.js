@@ -31,6 +31,25 @@ const VOZES = [
   { id: 'pt-BR-Wavenet-B', label: 'Masculina' },
 ];
 const TRILHAS = ['nenhuma', 'emocional', 'energetica', 'epica', 'suave', 'misteriosa'];
+
+// Temas: [id, nome, amostra de 3 cores pro seletor]. Só o acento e a
+// temperatura da base mudam — a estrutura é idêntica em todos.
+const TEMAS = [
+  ['grafite',   'Grafite',   ['#0a0a0c', '#1c1c21', '#e8b44a']],
+  ['violeta',   'Violeta',   ['#08080c', '#1b1b2b', '#8b7cff']],
+  ['galeria',   'Galeria',   ['#08080a', '#1d1d21', '#f2f2f4']],
+  ['esmeralda', 'Esmeralda', ['#070b0a', '#16211f', '#2ee6a8']],
+  ['sepia',     'Sépia',     ['#0e0b07', '#241d16', '#dcae55']],
+];
+
+function aplicaTema(id) {
+  const t = TEMAS.some(([x]) => x === id) ? id : 'grafite';
+  if (t === 'grafite') delete document.documentElement.dataset.tema;
+  else document.documentElement.dataset.tema = t;
+  try { localStorage.setItem('quadros:tema', t); } catch (_) { /* aba anônima */ }
+}
+// aplica ANTES do primeiro render pra não piscar o tema errado
+try { aplicaTema(localStorage.getItem('quadros:tema') || 'grafite'); } catch (_) { /* ignora */ }
 const LEGENDAS = [['nenhuma', 'Sem legenda'], ['caixa', 'Caixa preta'], ['contorno', 'Contorno']];
 // Mesmas 4 molduras do formato Ermos. No UGC a moldura e' 3D (a modelo segura),
 // entao vira descricao no prompt dos keyframes do cenario.
@@ -61,6 +80,14 @@ const IC = {
   fila: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
   galeria: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>',
   ajustes: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>',
+  // ícones de linha no lugar dos emojis: emoji vira desenho colorido de outro
+  // sistema (some no Android, briga com a paleta e denuncia amadorismo)
+  cat:   '<svg class="i" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h10"/><circle cx="17.5" cy="17" r="2.5"/></svg>',
+  mold:  '<svg class="i" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>',
+  loja:  '<svg class="i" viewBox="0 0 24 24"><path d="M4 8h16l-1.2 11.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8Z"/><path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2"/></svg>',
+  ugc:   '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>',
+  ermos: '<svg class="i" viewBox="0 0 24 24"><rect x="4" y="2.5" width="16" height="19" rx="1.5"/><path d="M8 7h8v8H8z"/></svg>',
+  pasta: '<svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h6a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
 };
 
 async function api(action, { body, form } = {}) {
@@ -249,7 +276,7 @@ function viewPastas() {
       prev = (S.cenarios.find((c) => (c.categoria || 'ugc') === k.id) || {}).thumbs?.[0];
     }
     return `<button class="pasta" data-pasta="${esc(k.id)}">
-      <div class="pasta-ph">${prev ? `<img src="${esc(prev)}" alt="">` : '<span>📁</span>'}</div>
+      <div class="pasta-ph">${prev ? `<img src="${esc(prev)}" alt="">` : IC.pasta}</div>
       <div class="pasta-tx"><b>${esc(k.nome)}</b><span>${esc(sub)}</span></div>
       <span class="pasta-ar">›</span>
     </button>`;
@@ -260,8 +287,8 @@ function viewPastas() {
     <div class="pastas">${pastas}</div>
     <div class="spacer"></div>
     <div class="btnrow">
-      <button class="btn ghost" id="edit-cats">⚙ Categorias</button>
-      <button class="btn ghost" id="go-mold">🖼 Molduras${S.molduras.length ? ` (${S.molduras.length})` : ''}</button>
+      <button class="btn ghost" id="edit-cats">${IC.cat} Categorias</button>
+      <button class="btn ghost" id="go-mold">${IC.mold} Molduras${S.molduras.length ? ` (${S.molduras.length})` : ''}</button>
     </div>
   `);
   app.querySelectorAll('[data-pasta]').forEach((b) => b.onclick = () => { S.catFiltro = b.dataset.pasta; render(); });
@@ -293,11 +320,11 @@ function viewCenarios() {
     </div>`;
   }).join('');
   shell(`
-    <h2 class="view-t">📁 ${esc(catN)}</h2>
+    <h2 class="view-t">${esc(catN)}</h2>
     <p class="view-sub">Cenários do formato ${esc(catN)}: modelo + ambiente + moldura. Monta uma vez, reusa sempre.</p>
     <div class="btnrow">
       <button class="btn" id="new-cen">+ Novo cenário ${esc(catN)}</button>
-      <button class="btn ghost" id="go-mold">🖼 Molduras${S.molduras.length ? ` (${S.molduras.length})` : ''}</button>
+      <button class="btn ghost" id="go-mold">${IC.mold} Molduras${S.molduras.length ? ` (${S.molduras.length})` : ''}</button>
     </div>
     <div class="spacer"></div>
     ${cards ? `<div class="grid">${cards}</div>` : `<div class="empty">Pasta <b>${esc(catN)}</b> vazia.<br>Crie o primeiro cenário dela acima.</div>`}
@@ -354,7 +381,7 @@ function viewFundos() {
     </div>`;
   }).join('');
   shell(`
-    <h2 class="view-t">📁 Ermos · Lugares</h2>
+    <h2 class="view-t">Ermos · Lugares</h2>
     <p class="view-sub">O quadro flutua sobre esses cenários (sem modelo). Ative um lugar 1x — o vídeo dele fica pronto pra sempre.</p>
     <div class="grid">${cards}</div>
     <div class="hint" style="margin-top:14px">Ativar = ~1 min (gera o vídeo ambiente do lugar no Veo). Depois, cada criativo Ermos é montado em segundos, sem custo de vídeo.</div>
@@ -571,7 +598,7 @@ function viewLoja() {
     ...topArt.map((a) => `<button class="chip ${L.artista === a.nome ? 'on' : ''}" data-art="${esc(a.nome)}">${esc(a.nome)} · ${a.n}</button>`),
   ].join('');
   shell(`
-    <h2 class="view-t">🛍 Escolher da loja</h2>
+    <h2 class="view-t">Escolher da loja</h2>
     <p class="view-sub">Atelier Malta · ${L.total} obra${L.total === 1 ? '' : 's'}${L.completo === false ? ' <b>(carregando o resto…)</b>' : ''}${L.artista ? ` de <b>${esc(L.artista)}</b>` : ''}${L.busca ? ` com “${esc(L.busca)}”` : ''}. ${S.mk.artes.length ? `<b>${S.mk.artes.length} selecionada${S.mk.artes.length > 1 ? 's' : ''}</b>.` : 'Toque pra selecionar.'}</p>
     <div class="field"><input type="text" id="lj-q" placeholder="buscar por obra ou artista…" value="${esc(L.busca)}"></div>
     <div class="field"><label>Orientação${trava ? ` — travada em <b>${ORIENT_NOME[trava]}</b> pelas que você já escolheu` : ''}</label>
@@ -921,8 +948,8 @@ function viewAprovar(id) {
 // ---------- NOVO MOCKUP ----------
 function viewNovo() {
   const fmtChips = `<div class="field"><label>Formato</label><div class="chips">
-    <button class="chip ${S.mk.formato === 'ugc' ? 'on' : ''}" data-fmt="ugc">🎬 UGC (modelo apresenta)</button>
-    <button class="chip ${S.mk.formato === 'ermos' ? 'on' : ''}" data-fmt="ermos">🖼 Ermos (quadro flutuante)</button>
+    <button class="chip ${S.mk.formato === 'ugc' ? 'on' : ''}" data-fmt="ugc">${IC.ugc} UGC · modelo apresenta</button>
+    <button class="chip ${S.mk.formato === 'ermos' ? 'on' : ''}" data-fmt="ermos">${IC.ermos} Ermos · quadro flutuante</button>
   </div></div>`;
   const bindFmt = () => app.querySelectorAll('[data-fmt]').forEach((b) => b.onclick = () => { S.mk.formato = b.dataset.fmt; render(); });
   if (S.mk.formato === 'ermos') return viewNovoErmos(fmtChips, bindFmt);
@@ -974,7 +1001,7 @@ function viewNovo() {
     <div class="field"><label>Arte${m.artes.length > 1 ? 's' : ''} do quadro ${m.artes.length ? `· ${m.artes.length}` : ''}</label>
       <div class="artes-row">${artesHtml}
         <div class="drop mini" id="drop"><div class="t">${m.artes.length ? '+ mais' : 'subir'}</div></div>
-        <button class="btn sm ghost" id="da-loja" style="align-self:center">🛍 da loja</button>
+        <button class="btn sm ghost" id="da-loja" style="align-self:center">${IC.loja} da loja</button>
       </div>
       <div class="hint">png · jpg · webp — pode selecionar várias de uma vez (lote de teste A/B)</div>
     </div>
@@ -1069,7 +1096,7 @@ function viewNovo() {
       const n = (r.jobs || []).length;
       m.artes = [];
       S.tab = 'fila'; await refresh();
-      toast(n > 1 ? `${n} vídeos na fila 🎬` : 'renderizando — acompanhe na Fila');
+      toast(n > 1 ? `${n} vídeos na fila` : 'renderizando — acompanhe na Fila');
     } catch (e) { toast(e.message, true); }
   };
 }
@@ -1123,7 +1150,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
     <div class="field"><label>Arte${m.artes.length > 1 ? 's' : ''} ${m.artes.length ? `· ${m.artes.length}` : ''} (trocam em sequência)</label>
       <div class="artes-row">${artesHtml}
         <div class="drop mini" id="drop"><div class="t">${m.artes.length ? '+ mais' : 'subir'}</div></div>
-        <button class="btn sm ghost" id="da-loja" style="align-self:center">🛍 da loja</button>
+        <button class="btn sm ghost" id="da-loja" style="align-self:center">${IC.loja} da loja</button>
       </div>
     </div>
     <div class="field"><label>Velocidade da troca</label><div class="chips">${ritmoChips}</div>
@@ -1217,7 +1244,7 @@ function viewNovoErmos(fmtChips, bindFmt) {
       } });
       m.artes = [];
       S.tab = 'fila'; await refresh();
-      toast('criativo Ermos na fila 🖼');
+      toast('criativo Ermos na fila');
     } catch (e) { toast(e.message, true); }
   };
 }
@@ -1522,7 +1549,17 @@ function viewGaleria() {
 
 // ---------- AJUSTES ----------
 function viewAjustes() {
+  const temaAtual = document.documentElement.dataset.tema || 'grafite';
+  const temaBtns = TEMAS.map(([id, nome, amostra]) =>
+    `<button class="tema ${temaAtual === id ? 'on' : ''}" data-tema="${id}" title="${nome}">
+       <span class="tema-sw" style="--a:${amostra[0]};--b:${amostra[1]};--c:${amostra[2]}"></span>
+       <span class="tema-n">${nome}</span>
+     </button>`).join('');
   shell(`<h2 class="view-t">Ajustes</h2>
+    <div class="field"><label>Tema</label>
+      <div class="temas">${temaBtns}</div>
+      <div class="hint">Muda só a cor — o layout é o mesmo. Fica salvo neste aparelho.</div>
+    </div>
     <div class="field"><label>Worker (no seu Mac)</label>
       <div class="hint">Pra gerar cenários e vídeos, deixe o worker rodando:<br><code>node tools/quadros-worker.mjs</code></div>
     </div>
@@ -1533,6 +1570,7 @@ function viewAjustes() {
     <div class="spacer"></div>
     <button class="btn ghost" id="logout">Sair</button>`);
   const t = $('#tok'); if (t) t.onclick = () => { t.select(); document.execCommand && document.execCommand('copy'); toast('token copiado'); };
+  app.querySelectorAll('[data-tema]').forEach((b) => b.onclick = () => { aplicaTema(b.dataset.tema); render(); });
   $('#logout').onclick = async () => { await api('logout').catch(() => {}); S.auth = false; renderLogin(); };
 }
 

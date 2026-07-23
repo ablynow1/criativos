@@ -1,54 +1,47 @@
-/* ==========================================================================
-   ESTÚDIO DE QUADROS — sistema de design
-   --------------------------------------------------------------------------
-   Dark luxury editorial (Atelier by Malta). Mobile-first de verdade, com três
-   respostas de layout: rodapé no celular, rail no tablet, sidebar no desktop.
-
-   Regras que nasceram da auditoria e NÃO podem regredir:
-   · superfícies precisam ser VISÍVEIS (o antigo --surface tinha 1,12:1 de
-     contraste contra o fundo — cartão nenhum aparecia);
-   · texto de apoio precisa ser LEGÍVEL (o antigo --faint tinha 2,9:1 e era a
-     cor de toda a microcópia e de todo estado vazio);
-   · o CTA principal não pode parecer um chip marcado — ação sólida, seleção
-     contornada;
-   · todo alvo de toque tem piso de 44px; cresce a CAIXA, nunca só a letra;
-   · todo campo de texto tem 16px no celular, senão o iOS dá zoom a cada foco;
-   · todo elemento clicável tem :hover, :active e :focus-visible.
-   ========================================================================== */
-
 :root {
-  /* --- superfícies: degraus largos o bastante pra enxergar --- */
-  --bg:          #0e0b07;
-  --surface:     #191410;   /* cartão sobre o fundo            */
-  --surface-2:   #241d16;   /* cartão sobre cartão / campo     */
-  --surface-3:   #322820;   /* hover                           */
-  --surface-4:   #40342a;   /* pressionado                     */
+  /* ====================== BASE NEUTRA ======================
+     A paleta antiga era MARROM de ponta a ponta (matiz 27-39°, até 33% de
+     saturação — inclusive o "branco" do texto): um filtro sépia sobre a
+     interface, que envelhecia a tela E contaminava a percepção das artes.
+     Agora a base é NEUTRA FRIA (saturação ~4%): a única cor forte da tela é
+     a obra do cliente. Ferramenta de mídia se comporta como sala escura. */
+  --bg:          #0a0a0c;
+  --bg-2:        #0f0f12;   /* faixas e cabeçalho */
+  --surface:     #141418;   /* cartão sobre o fundo   */
+  --surface-2:   #1c1c21;   /* campo / cartão sobre cartão */
+  --surface-3:   #26262d;   /* hover        */
+  --surface-4:   #32323a;   /* pressionado  */
 
-  /* --- tinta: os três degraus passam em contraste sobre --bg --- */
-  --ink:         #f4eee3;   /* 15.8:1 — títulos e valores      */
-  --ink-2:       #c3b49b;   /*  8.4:1 — texto de apoio         */
-  --ink-3:       #97876f;   /*  5.1:1 — microcópia e legenda   */
-  --ink-4:       #6d6152;   /*  3.0:1 — só decorativo          */
+  /* tinta neutra — todos os degraus passam em contraste sobre --bg */
+  --ink:         #f7f7f8;   /* 18.4:1 */
+  --ink-2:       #b9b9c2;   /*  9.1:1 */
+  --ink-3:       #8b8b96;   /*  5.2:1 */
+  --ink-4:       #5e5e68;   /*  3.0:1 — só decorativo */
 
-  /* --- linhas --- */
-  --line:        rgba(244,238,227,.10);
-  --line-2:      rgba(244,238,227,.18);
-  --line-3:      rgba(244,238,227,.30);
+  --line:        rgba(255,255,255,.08);
+  --line-2:      rgba(255,255,255,.14);
+  --line-3:      rgba(255,255,255,.24);
 
-  /* --- marca e semântica --- */
-  --gold:        #dcae55;
-  --gold-hi:     #f0c877;
-  --gold-dim:    #a67f34;
-  --gold-ink:    #241703;
-  --gold-tint:   rgba(220,174,85,.12);
-  --gold-tint-2: rgba(220,174,85,.20);
+  /* ====================== ACENTO (trocável por tema) ======================
+     Um acento só, usado com parcimônia: ação principal e seleção. */
+  --ac:          #e8b44a;   /* âmbar quente — a alma Atelier, sem o sépia */
+  --ac-hi:       #ffd27a;
+  --ac-dim:      #a87f2c;
+  --ac-ink:      #1a1200;   /* texto sobre o acento sólido */
+  --ac-tint:     rgba(232,180,74,.13);
+  --ac-tint-2:   rgba(232,180,74,.22);
+  --ac-glow:     rgba(232,180,74,.28);
 
-  --ok:          #62c48a;
-  --ok-tint:     rgba(98,196,138,.14);
-  --warn:        #e3a742;
-  --danger:      #e8695e;
-  --danger-tint: rgba(232,105,94,.14);
-  --info:        #7fb2e0;
+  --ok:          #4ade80;
+  --ok-tint:     rgba(74,222,128,.13);
+  --warn:        #fbbf24;
+  --danger:      #f87171;
+  --danger-tint: rgba(248,113,113,.13);
+  --info:        #7dd3fc;
+
+  /* compatibilidade: o CSS legado ainda fala "gold" */
+  --gold: var(--ac); --gold-hi: var(--ac-hi); --gold-dim: var(--ac-dim);
+  --gold-ink: var(--ac-ink); --gold-tint: var(--ac-tint); --gold-tint-2: var(--ac-tint-2);
 
   /* --- tipografia --- */
   --serif: "Instrument Serif", ui-serif, "New York", Georgia, "Iowan Old Style", serif;
@@ -89,6 +82,45 @@
   --head-h: 54px;
   --measure: 720px; /* largura de leitura confortável */
 }
+
+/* ====================== TEMAS ======================
+   Só o ACENTO e a temperatura da base mudam — a estrutura é a mesma. O tema
+   fica no <html data-tema> e é lembrado no aparelho. */
+
+/* VIOLETA — SaaS de última geração (Linear/Vercel). Base mais fria ainda. */
+html[data-tema="violeta"] {
+  --bg: #08080c; --bg-2: #0d0d13; --surface: #131320; --surface-2: #1b1b2b;
+  --surface-3: #25253a; --surface-4: #31314b;
+  --ac: #8b7cff; --ac-hi: #a99cff; --ac-dim: #5a4bd6; --ac-ink: #0b0820;
+  --ac-tint: rgba(139,124,255,.14); --ac-tint-2: rgba(139,124,255,.24);
+  --ac-glow: rgba(139,124,255,.34);
+}
+/* GALERIA — quase monocromático. A obra é a ÚNICA cor da tela. */
+html[data-tema="galeria"] {
+  --bg: #08080a; --bg-2: #0d0d10; --surface: #141417; --surface-2: #1d1d21;
+  --surface-3: #27272c; --surface-4: #333339;
+  --ac: #f2f2f4; --ac-hi: #ffffff; --ac-dim: #9a9aa2; --ac-ink: #0a0a0c;
+  --ac-tint: rgba(255,255,255,.10); --ac-tint-2: rgba(255,255,255,.18);
+  --ac-glow: rgba(255,255,255,.22);
+}
+/* ESMERALDA — fresco e vivo, contrasta com arte quente (madeira, dourado) */
+html[data-tema="esmeralda"] {
+  --bg: #070b0a; --bg-2: #0b1110; --surface: #101817; --surface-2: #16211f;
+  --surface-3: #1f2e2b; --surface-4: #2a3d39;
+  --ac: #2ee6a8; --ac-hi: #6bf5c6; --ac-dim: #17a97a; --ac-ink: #01201a;
+  --ac-tint: rgba(46,230,168,.13); --ac-tint-2: rgba(46,230,168,.22);
+  --ac-glow: rgba(46,230,168,.30);
+}
+/* SÉPIA — a paleta antiga, pra comparar */
+html[data-tema="sepia"] {
+  --bg: #0e0b07; --bg-2: #141009; --surface: #191410; --surface-2: #241d16;
+  --surface-3: #322820; --surface-4: #40342a;
+  --ink: #f4eee3; --ink-2: #c3b49b; --ink-3: #97876f; --ink-4: #6d6152;
+  --ac: #dcae55; --ac-hi: #f0c877; --ac-dim: #a67f34; --ac-ink: #241703;
+  --ac-tint: rgba(220,174,85,.12); --ac-tint-2: rgba(220,174,85,.20);
+  --ac-glow: rgba(220,174,85,.26);
+}
+
 /* ---------------------------------------------------------------- reset -- */
 *, *::before, *::after { box-sizing: border-box; }
 * { margin: 0; }
@@ -105,6 +137,17 @@ body {
   text-rendering: optimizeLegibility;
   overflow-wrap: break-word;
   min-height: 100svh;
+}
+
+/* PROFUNDIDADE: um brilho difuso do acento no topo tira o "fundo chapado"
+   que fazia a tela parecer um documento em vez de um estúdio. Fica atrás de
+   tudo e não intercepta clique. */
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: 62svh; z-index: -1;
+  background:
+    radial-gradient(120% 70% at 50% -18%, var(--ac-tint) 0%, transparent 62%),
+    linear-gradient(180deg, var(--bg-2) 0%, var(--bg) 60%);
+  pointer-events: none;
 }
 
 img, video, svg { display: block; max-width: 100%; }
@@ -328,7 +371,9 @@ nav.tabs button.on .badge { background: var(--gold-ink); color: var(--gold); bor
   box-shadow: var(--sh-1);
   transition: filter var(--fast), transform var(--fast), background var(--fast), box-shadow var(--fast);
 }
-.btn:hover:not(:disabled) { filter: brightness(1.08); box-shadow: var(--sh-2); }
+/* a ação principal EMITE luz — é o único elemento da tela que brilha */
+.btn:not(.ghost):not(.danger) { box-shadow: 0 2px 10px -2px var(--ac-glow), var(--sh-1); }
+.btn:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 22px -4px var(--ac-glow), var(--sh-2); }
 .btn:active:not(:disabled) { transform: translateY(1px); filter: brightness(.94); box-shadow: var(--sh-1); }
 .btn:disabled { opacity: .4; box-shadow: none; filter: grayscale(.35); }
 
@@ -361,6 +406,35 @@ nav.tabs button.on .badge { background: var(--gold-ink); color: var(--gold); bor
 .btnrow .btn { flex: 1; }
 
 /* link discreto dentro de um texto de ajuda */
+/* icone de linha dentro de botao/chip — herda a cor do texto */
+svg.i {
+  width: 17px; height: 17px; flex: none;
+  stroke: currentColor; fill: none;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.chip svg.i, .btn svg.i { margin-right: -2px; }
+.pasta-ph svg.i { width: 26px; height: 26px; color: var(--ink-4); }
+
+/* ---- seletor de tema ---- */
+.temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--s2); }
+.tema {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s2);
+  padding: var(--s3) var(--s2);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--ink-3); font-size: var(--t-xs); font-weight: 650;
+  transition: border-color var(--fast), background var(--fast), transform var(--fast);
+}
+.tema:hover { background: var(--surface-2); border-color: var(--line-2); transform: translateY(-2px); }
+.tema.on { border-color: var(--ac); color: var(--ink); background: var(--ac-tint); }
+/* amostra: fundo, cartao e acento do tema — da' pra ver a cara sem trocar */
+.tema-sw {
+  width: 100%; height: 34px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: linear-gradient(120deg, var(--a) 0 42%, var(--b) 42% 72%, var(--c) 72% 100%);
+}
+
 .linkish {
   display: inline; padding: 0;
   color: var(--gold); font: inherit; font-weight: 650;
@@ -480,13 +554,14 @@ nav.tabs button.on .badge { background: var(--gold-ink); color: var(--gold); bor
 
 /* ---- cartão ---- */
 .card {
-  background: var(--surface);
+  background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 42%);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   overflow: hidden;
-  transition: border-color var(--fast), background var(--fast);
+  box-shadow: var(--sh-1);
+  transition: border-color var(--fast), transform var(--fast), box-shadow var(--fast);
 }
-.card:hover { border-color: var(--line-2); }
+.card:hover { border-color: var(--line-2); transform: translateY(-2px); box-shadow: var(--sh-2); }
 .cbody { padding: var(--s4); }
 .cactions {
   display: flex; flex-wrap: wrap; gap: var(--s2);
