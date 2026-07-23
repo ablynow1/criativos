@@ -43,18 +43,21 @@
   --gold: var(--ac); --gold-hi: var(--ac-hi); --gold-dim: var(--ac-dim);
   --gold-ink: var(--ac-ink); --gold-tint: var(--ac-tint); --gold-tint-2: var(--ac-tint-2);
 
-  /* --- tipografia --- */
+  /* --- tipografia (fontes da marca, carregadas no index.php) --- */
   --serif: "Instrument Serif", ui-serif, "New York", Georgia, "Iowan Old Style", serif;
-  --sans:  ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --sans:  "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono:  ui-monospace, "SF Mono", Menlo, monospace;
 
+  /* escala com SALTO no topo: título de tela precisa dominar a página, não
+     ser "o texto um pouco maior". O salto md→display é o que dá o drama. */
   --t-xs:  11.5px;
   --t-sm:  13px;
   --t-md:  15px;
   --t-lg:  17px;
   --t-xl:  21px;
-  --t-2xl: 26px;
-  --t-3xl: 33px;
+  --t-2xl: 28px;
+  --t-3xl: 40px;
+  --t-display: clamp(38px, 8.5vw, 60px);   /* título de tela */
 
   /* --- espaço (base 4) --- */
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
@@ -316,26 +319,32 @@ nav.tabs button.on .badge { background: var(--gold-ink); color: var(--gold); bor
 }
 
 /* =========================================================== TIPOGRAFIA == */
+/* O título de tela DOMINA a página. Antes era 26px — "o texto um pouco
+   maior", sem hierarquia. O salto pro display é o que dá presença editorial. */
 .view-t {
   font-family: var(--serif);
-  font-size: var(--t-2xl);
+  font-size: var(--t-display);
   font-weight: 400;
-  line-height: 1.15;
-  letter-spacing: .005em;
-  margin-bottom: var(--s2);
+  line-height: .98;
+  letter-spacing: -.015em;
+  margin-bottom: var(--s3);
+  /* leve degradê na tinta: o topo do caractere brilha um pouco mais */
+  background: linear-gradient(178deg, var(--ink) 30%, var(--ink-2) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
 }
 .view-sub {
-  color: var(--ink-2);
-  font-size: var(--t-sm);
-  line-height: 1.55;
-  margin-bottom: var(--s5);
-  max-width: 64ch;
+  color: var(--ink-3);
+  font-size: var(--t-md);
+  line-height: 1.6;
+  margin-bottom: var(--s7);
+  max-width: 58ch;
 }
+.view-sub b { color: var(--ink-2); font-weight: 600; }
 .view-sub b { color: var(--ink); font-weight: 650; }
 
 @media (min-width: 1100px) {
-  .view-t { font-size: var(--t-3xl); }
-  .view-sub { font-size: var(--t-md); }
+  .view-t { letter-spacing: -.02em; }
 }
 
 /* microcópia — o seletor precisa funcionar SOZINHO (antes era descendente de
@@ -621,7 +630,7 @@ svg.i {
 /* ============================================================= GRADES ==== */
 /* auto-fill em tudo: uma declaração serve o celular e o monitor de 27" */
 .grid        { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--s3); }
-.gal         { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--s3); }
+.gal         { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--s3); }
 .loja-grid   { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s3); }
 .fnd-grid    { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: var(--s3); }
 .approve-grid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s3); margin-top: var(--s3); }
@@ -635,34 +644,55 @@ svg.i {
 
 /* ============================================== COMPONENTES DE TELA ====== */
 
-/* ---- home: pastas por formato ---- */
+/* ---- home: cartões de formato (a arte é o herói) ---- */
+.pastas {
+  display: grid;
+  /* 2 colunas no celular: 1 coluna com aspect 4/5 dava ~470px por cartão e
+     virava rolagem longa só pra ver 3 formatos */
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--s3);
+}
+@media (min-width: 700px)  { .pastas { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--s4); } }
+
 .pasta {
-  display: flex; align-items: center; gap: var(--s4);
-  width: 100%; padding: var(--s3);
+  position: relative; display: block; width: 100%; padding: 0;
+  aspect-ratio: 4/5;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  text-align: left;
-  transition: border-color var(--fast), background var(--fast), transform var(--fast);
+  overflow: hidden; text-align: left;
+  transition: transform var(--base), border-color var(--fast), box-shadow var(--base);
 }
-.pasta:hover { background: var(--surface-2); border-color: var(--line-2); }
-.pasta:active { transform: scale(.99); background: var(--surface-3); }
-.pasta-ph {
-  width: 66px; height: 66px; flex: none;
-  border-radius: var(--r-md); overflow: hidden;
-  background: var(--surface-3);
-  display: grid; place-items: center;
-  font-size: 24px;
+.pasta:hover { transform: translateY(-4px); border-color: var(--line-3); box-shadow: var(--sh-3); }
+.pasta:active { transform: translateY(-1px) scale(.995); }
+
+.pasta-ph { position: absolute; inset: 0; display: grid; place-items: center; background: var(--surface-2); }
+.pasta-ph img {
+  width: 100%; height: 100%; object-fit: cover;
+  transition: transform 1.1s cubic-bezier(.2,0,.2,1), filter var(--base);
+  filter: saturate(1.02);
 }
-.pasta-ph img { width: 100%; height: 100%; object-fit: cover; }
-.pasta-tx { min-width: 0; flex: 1; }
+.pasta:hover .pasta-ph img { transform: scale(1.06); }
+.pasta-vazia { color: var(--ink-4); }
+.pasta-vazia svg.i { width: 44px; height: 44px; }
+
+/* véu embaixo pro texto ficar legível sobre qualquer imagem */
+.pasta::after {
+  content: ""; position: absolute; inset: 40% 0 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(6,6,8,.55) 45%, rgba(6,6,8,.94) 100%);
+}
+.pasta-tx { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: var(--s5) var(--s3) var(--s3); }
+@media (min-width: 700px) { .pasta-tx { padding: var(--s6) var(--s4) var(--s4); } }
 .pasta-tx > b {
   display: block;
   font-family: var(--serif); font-weight: 400;
-  font-size: var(--t-xl); line-height: 1.2;
+  font-size: var(--t-xl); line-height: 1.05; letter-spacing: -.01em;
+  color: var(--ink);
 }
-.pasta-tx > span { display: block; color: var(--ink-3); font-size: var(--t-sm); margin-top: 3px; }
-.pasta-ar { color: var(--ink-4); font-size: var(--t-xl); flex: none; padding-right: var(--s2); }
+@media (min-width: 700px) { .pasta-tx > b { font-size: var(--t-2xl); } }
+.pasta-tx > span { display: block; color: var(--ink-2); font-size: var(--t-xs); margin-top: 5px; line-height: 1.35; }
+@media (min-width: 700px) { .pasta-tx > span { font-size: var(--t-sm); margin-top: var(--s2); } }
+
 
 /* ---- cartão de cenário / de lugar ---- */
 .card .thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
@@ -1043,13 +1073,50 @@ svg.i {
 .refazer .hint { margin: 0 0 var(--s3); }
 
 /* ---- galeria ---- */
-.gal video {
-  width: 100%; aspect-ratio: 9/16; object-fit: cover;
-  border-radius: var(--r-md);
+/* ---- galeria: vitrine (o criativo é o herói) ---- */
+.gcard {
+  position: relative; margin: 0;
+  border-radius: var(--r-md); overflow: hidden;
   background: #000;
   border: 1px solid var(--line);
+  transition: transform var(--base), border-color var(--fast), box-shadow var(--base);
 }
-.gcap { color: var(--ink-3); font-size: var(--t-xs); margin-top: var(--s1); line-height: 1.35; }
+.gcard:hover { transform: translateY(-3px); border-color: var(--line-3); box-shadow: var(--sh-3); }
+.gcard video { width: 100%; aspect-ratio: 9/16; object-fit: cover; display: block; }
+
+/* botão de ver grande: só aparece no hover/foco, pra não competir com a arte */
+.gplay {
+  position: absolute; inset: 0; z-index: 1;
+  display: grid; place-items: center;
+  background: rgba(6,6,8,.28);
+  opacity: 0; transition: opacity var(--fast);
+}
+.gplay svg { width: 46px; height: 46px; color: #fff; filter: drop-shadow(0 2px 12px rgba(0,0,0,.6)); }
+.gcard:hover .gplay, .gplay:focus-visible { opacity: 1; }
+
+.gcard figcaption {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s2);
+  padding: var(--s6) var(--s3) var(--s3);
+  background: linear-gradient(180deg, transparent, rgba(6,6,8,.92));
+  pointer-events: none;
+}
+.gnome {
+  color: var(--ink-2); font-size: var(--t-xs); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.gcard .gdl { display: flex; gap: 5px; margin: 0; flex: none; pointer-events: auto; }
+.gcard .gdl a {
+  min-height: 28px; padding: 0 var(--s2);
+  background: rgba(255,255,255,.10); backdrop-filter: blur(6px);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  color: var(--ink); font-size: 10.5px; font-weight: 700;
+}
+.gcard .gdl a:hover { background: var(--ac); color: var(--ac-ink); border-color: var(--ac); }
+
+/* player grande reusa a lupa */
+.lupa video { max-width: 100%; max-height: 100%; border-radius: var(--r-md); box-shadow: var(--sh-3); }
+
 
 /* ---- YouTube ---- */
 .yt-player {

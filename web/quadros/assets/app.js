@@ -9,6 +9,7 @@ const S = {
   auth: false, tab: 'cenarios', screen: null, catFiltro: null, // null = home (pastas)
   refazer: null, // painel "refazer com outra moldura/lugar" aberto num job
   logAberto: null, // id do job com o log do pipeline expandido na Fila
+  galFiltro: 'todos', // filtro de formato na Galeria
   cenarios: [], categorias: [], molduras: [], fundos: [], jobs: [], defaults: { movimento: 'medio', duracaoAlvo: 25 },
   loja: { produtos: [], page: 1, paginas: 1, total: 0, busca: '', artista: '', artistas: [], orient: '', orientacoes: null, carregando: false, completo: true },
   yt: { busca: '', videos: [], sel: null, inicio: 0, carregando: false },
@@ -88,6 +89,7 @@ const IC = {
   ugc:   '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>',
   ermos: '<svg class="i" viewBox="0 0 24 24"><rect x="4" y="2.5" width="16" height="19" rx="1.5"/><path d="M8 7h8v8H8z"/></svg>',
   pasta: '<svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h6a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
+  play:  '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5.5v13l11-6.5z"/></svg>',
 };
 
 async function api(action, { body, form } = {}) {
@@ -248,6 +250,27 @@ function sincronizaUrl(rota) {
   ignoraPop = false;
 }
 
+/* MÍDIA SOB DEMANDA (galeria): 33 vídeos baixando juntos travam a página e
+   queimam dados no celular. O src só entra quando o cartão chega perto da
+   tela. O listener é GLOBAL e registrado UMA vez — preso à tela ele morria a
+   cada repintura do poll de 5s, e a rolagem parava de carregar. */
+function carregaMidiaVisivel() {
+  const limite = innerHeight + 700;
+  app.querySelectorAll('[data-gv]').forEach((v) => {
+    if (v.src || !v.dataset.src) return;
+    const t = v.getBoundingClientRect().top;
+    if (t < limite && t > -1200) v.src = v.dataset.src;
+  });
+}
+let midiaAgendada = false;
+const aoRolarMidia = () => {
+  if (midiaAgendada) return;
+  midiaAgendada = true;
+  requestAnimationFrame(() => { midiaAgendada = false; carregaMidiaVisivel(); });
+};
+addEventListener('scroll', aoRolarMidia, { passive: true });
+addEventListener('resize', aoRolarMidia, { passive: true });
+
 window.addEventListener('popstate', () => {
   if (ignoraPop) return;
   // a lupa empilhou uma entrada só pra ela: o voltar fecha a lupa, não a tela
@@ -275,15 +298,17 @@ function viewPastas() {
       sub = n ? `${n} cenário${n === 1 ? '' : 's'} · modelo apresenta` : 'vazia — crie o primeiro cenário';
       prev = (S.cenarios.find((c) => (c.categoria || 'ugc') === k.id) || {}).thumbs?.[0];
     }
+    // a arte é o herói: capa grande, texto sobreposto no rodapé do cartão
     return `<button class="pasta" data-pasta="${esc(k.id)}">
-      <div class="pasta-ph">${prev ? `<img src="${esc(prev)}" alt="">` : IC.pasta}</div>
+      <div class="pasta-ph">${prev ? `<img src="${esc(prev)}" alt="" loading="lazy">` : `<span class="pasta-vazia">${IC.pasta}</span>`}</div>
       <div class="pasta-tx"><b>${esc(k.nome)}</b><span>${esc(sub)}</span></div>
-      <span class="pasta-ar">›</span>
     </button>`;
   }).join('');
+  const prontos = S.jobs.filter((j) => j.status === 'done' && j.video).length;
   shell(`
-    <h2 class="view-t">Formatos</h2>
-    <p class="view-sub">Cada formato é uma linguagem de criativo, com seus próprios cenários.</p>
+    <h2 class="view-t">Estúdio</h2>
+    <p class="view-sub">Cada formato é uma linguagem de criativo, com seus próprios cenários.
+      ${prontos ? `<b>${prontos}</b> criativo${prontos === 1 ? '' : 's'} pronto${prontos === 1 ? '' : 's'} na Galeria.` : ''}</p>
     <div class="pastas">${pastas}</div>
     <div class="spacer"></div>
     <div class="btnrow">
@@ -1535,16 +1560,65 @@ function viewFila() {
 // ---------- GALERIA ----------
 function viewGaleria() {
   const done = S.jobs.filter((j) => ['mockup', 'ermos'].includes(j.tipo) && j.status === 'done' && j.video);
-  const cells = done.map((j) => `<div>
-    <video src="${esc(j.video)}" controls playsinline preload="metadata"></video>
-    <div class="gcap">${esc(j.nome)}</div>
-    <div class="gdl">
-      <a href="${esc(j.video)}" download>⬇ 9:16</a>
-      ${j.video45 ? `<a href="${esc(j.video45)}" download>⬇ 4:5 feed</a>` : ''}
-    </div>
-  </div>`).join('');
-  shell(`<h2 class="view-t">Galeria</h2><p class="view-sub">Seus mockups prontos — baixa e sobe no Gerenciador de Anúncios.</p>
-    ${done.length ? `<div class="gal">${cells}</div>` : '<div class="empty">Nenhum mockup pronto ainda.</div>'}`);
+  const filtro = S.galFiltro || 'todos';
+  const visiveis = filtro === 'todos' ? done : done.filter((j) => j.tipo === filtro);
+  const nUgc = done.filter((j) => j.tipo === 'mockup').length;
+  const nEr = done.filter((j) => j.tipo === 'ermos').length;
+  const chips = [['todos', `todos · ${done.length}`], ['mockup', `UGC · ${nUgc}`], ['ermos', `Ermos · ${nEr}`]]
+    .filter(([id]) => id === 'todos' || (id === 'mockup' ? nUgc : nEr))
+    .map(([id, lb]) => `<button class="chip ${filtro === id ? 'on' : ''}" data-gfil="${id}">${lb}</button>`).join('');
+
+  // vitrine: o vídeo é o herói e toca sozinho no hover (mudo); as ações só
+  // aparecem quando o cartão é focado — antes competiam com o criativo
+  const cells = visiveis.map((j) => `<figure class="gcard">
+    <video data-src="${esc(j.video)}#t=0.6" playsinline muted loop preload="metadata" data-gv></video>
+    <button class="gplay" data-gfull="${esc(j.video)}" aria-label="ver grande">${IC.play}</button>
+    <figcaption>
+      <span class="gnome">${esc(j.nome)}</span>
+      <span class="gdl">
+        <a href="${esc(j.video)}" download>9:16</a>
+        ${j.video45 ? `<a href="${esc(j.video45)}" download>4:5</a>` : ''}
+      </span>
+    </figcaption>
+  </figure>`).join('');
+
+  shell(`<h2 class="view-t">Galeria</h2>
+    <p class="view-sub">Seus criativos prontos — baixe e suba no Gerenciador de Anúncios.</p>
+    ${done.length ? `<div class="chips" style="margin-bottom:var(--s5)">${chips}</div>` : ''}
+    ${visiveis.length ? `<div class="gal">${cells}</div>`
+      : `<div class="empty">${done.length ? 'Nenhum criativo neste formato.' : 'Nenhum criativo pronto ainda — comece em <b>Novo</b>.'}</div>`}`);
+
+  app.querySelectorAll('[data-gfil]').forEach((b) => b.onclick = () => { S.galFiltro = b.dataset.gfil; render(); });
+  // SOB DEMANDA: 33 vídeos baixando de uma vez travam a página (e no celular
+  // queimam dados à toa). O src só entra quando o cartão chega perto da tela.
+  // Cálculo direto no scroll em vez de IntersectionObserver — funciona igual
+  // em qualquer navegador e é verificável.
+  carregaMidiaVisivel();
+  // prévia ao passar o mouse: dá pra varrer a vitrine sem clicar em nada
+  app.querySelectorAll('[data-gv]').forEach((v) => {
+    v.onmouseenter = () => { if (v.src) v.play().catch(() => {}); };
+    v.onmouseleave = () => { v.pause(); v.currentTime = 0; };
+  });
+  app.querySelectorAll('[data-gfull]').forEach((b) => b.onclick = () => abreVideo(b.dataset.gfull));
+}
+
+// player grande, com som, sobre a vitrine (mesma mecânica da lupa)
+function abreVideo(src) {
+  fechaLupa(true);
+  const el = document.createElement('div');
+  el.className = 'lupa';
+  el.innerHTML = `<button class="lupa-x" aria-label="fechar">✕</button>
+    <video src="${esc(src)}" controls autoplay playsinline></video>`;
+  document.body.appendChild(el);
+  document.body.style.overflow = 'hidden';
+  lupa = { el, urls: [src], i: 0 };
+  el.querySelector('.lupa-x').onclick = () => history.back();
+  el.onclick = (e) => { if (e.target === el) history.back(); };
+  lupa.tecla = (e) => { if (e.key === 'Escape') history.back(); };
+  addEventListener('keydown', lupa.tecla);
+  ignoraPop = true;
+  history.pushState({ lupa: true }, '', location.hash);
+  ignoraPop = false;
 }
 
 // ---------- AJUSTES ----------
