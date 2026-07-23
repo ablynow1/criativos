@@ -63,7 +63,7 @@ async function main() {
   }
 
   const vidPath = path.join(outDir, 'fundo.mp4');
-  console.log('[F 2/2] animando o lugar no Veo (8s)…');
+  console.log('[F 2/2] animando o lugar no Veo (8s, sem áudio)…');
   await tenta(() => generateVideoClip({
     imagePath: kfPath,
     prompt: preset.movimento,
@@ -71,7 +71,10 @@ async function main() {
     aspectRatio: '9:16',
     resolution: '1080p',
     durationSeconds: 8,
-    ambiente: true,
+    // SEM áudio: o Ermos descarta 100% o som do fundo (só entra a trilha que o
+    // Vitor escolhe). O SKU cobrado é "Veo 3 AUDIO Video Generation" — gerar
+    // áudio pra jogar no lixo era pagar caro por nada.
+    ambiente: false,
     negativePrompt: VEO_NEGATIVE,
   }), 'veo', 3);
 

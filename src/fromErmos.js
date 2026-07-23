@@ -144,18 +144,20 @@ async function main() {
   for (let t = 0, i = 0; t < T; t += trocaFundo, i += 1) {
     segs.push({ dir: fundos[i % fundos.length], dur: Math.min(trocaFundo, T - t) });
   }
+  // A base é SÓ VÍDEO. O áudio do fundo era processado aqui e descartado no
+  // final (só entra a trilha escolhida) — e agora os fundos nem têm faixa de
+  // áudio, porque gerar áudio no Veo pra jogar fora era desperdício de SKU.
   const inputs = []; let filter = ''; const vlabels = [];
   segs.forEach((s, n) => {
     inputs.push('-i', path.join(s.dir, 'fundo.mp4'));
     filter += `[${n}:v]trim=0:${s.dur.toFixed(3)},setpts=PTS-STARTPTS,fps=24,scale=${CANVAS_W}:${CANVAS_H}:flags=lanczos,setsar=1[v${n}];`;
-    filter += `[${n}:a]atrim=0:${s.dur.toFixed(3)},asetpts=PTS-STARTPTS,aresample=48000[a${n}];`;
-    vlabels.push(`[v${n}][a${n}]`);
+    vlabels.push(`[v${n}]`);
   });
-  filter += `${vlabels.join('')}concat=n=${segs.length}:v=1:a=1[bv][ba]`;
+  filter += `${vlabels.join('')}concat=n=${segs.length}:v=1:a=0[bv]`;
   const base = path.join(tmpDir, 'base.mp4');
-  await runFfmpeg([...inputs, '-filter_complex', filter, '-map', '[bv]', '-map', '[ba]',
+  await runFfmpeg([...inputs, '-filter_complex', filter, '-map', '[bv]', '-an',
     '-t', String(T), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14',
-    '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000', base]);
+    '-pix_fmt', 'yuv420p', base]);
 
   // trilha: YouTube (trecho escolhido) OU mood gerado pela Lyria OU nenhuma
   let musicPath = null;
